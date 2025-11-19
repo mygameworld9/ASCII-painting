@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { AsciiSettings, AnimationMode } from '../types';
+import { Copy, Check } from 'lucide-react';
 
 interface AsciiRendererProps {
   imageSrc: string;
@@ -11,6 +12,7 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
   const containerRef = useRef<HTMLDivElement>(null);
   const animationRef = useRef<number>(0);
   const [sourceImage, setSourceImage] = useState<HTMLImageElement | null>(null);
+  const [isCopied, setIsCopied] = useState(false);
 
   // Load image
   useEffect(() => {
@@ -21,6 +23,60 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
       setSourceImage(img);
     };
   }, [imageSrc]);
+
+  const handleCopyAscii = () => {
+    if (!sourceImage) return;
+
+    const cols = settings.resolution;
+    const charW = settings.fontSize * 0.6;
+    const charH = settings.fontSize;
+    const aspectRatio = sourceImage.height / sourceImage.width;
+    const rows = Math.floor(cols * aspectRatio * (charW / charH));
+
+    const offCanvas = document.createElement('canvas');
+    offCanvas.width = cols;
+    offCanvas.height = rows;
+    const ctx = offCanvas.getContext('2d');
+    
+    if (!ctx) return;
+
+    ctx.drawImage(sourceImage, 0, 0, cols, rows);
+    const imageData = ctx.getImageData(0, 0, cols, rows);
+    const pixels = imageData.data;
+
+    let asciiString = "";
+    const chars = settings.density;
+    const charLen = chars.length;
+
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        const pixelIndex = (y * cols + x) * 4;
+        let r = pixels[pixelIndex];
+        let g = pixels[pixelIndex + 1];
+        let b = pixels[pixelIndex + 2];
+
+        // Apply Contrast (same as render loop)
+        if (settings.contrast !== 1.0) {
+             const factor = (259 * (settings.contrast * 255 + 255)) / (255 * (259 - settings.contrast * 255));
+             r = factor * (r - 128) + 128;
+             g = factor * (g - 128) + 128;
+             b = factor * (b - 128) + 128;
+        }
+
+        let brightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+        if (settings.invert) brightness = 1.0 - brightness;
+
+        const charIndex = Math.floor(Math.max(0, Math.min(1, brightness)) * (charLen - 1));
+        asciiString += chars[charIndex];
+      }
+      asciiString += "\n";
+    }
+
+    navigator.clipboard.writeText(asciiString).then(() => {
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2000);
+    });
+  };
 
   // Rendering Loop
   useEffect(() => {
@@ -179,7 +235,7 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
   return (
     <div 
       ref={containerRef} 
-      className="w-full h-full flex items-center justify-center overflow-hidden bg-black/50 rounded-xl border border-zinc-800 shadow-2xl"
+      className="w-full h-full flex items-center justify-center overflow-hidden bg-black/50 rounded-xl border border-zinc-800 shadow-2xl relative group"
     >
       {!sourceImage && (
         <div className="text-zinc-500 animate-pulse">Processing Image...</div>
@@ -189,6 +245,17 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
         className="max-w-full max-h-full object-contain"
         style={{ imageRendering: 'pixelated' }}
       />
+
+      {sourceImage && (
+        <button
+          onClick={handleCopyAscii}
+          className="absolute top-4 right-4 bg-zinc-900/80 backdrop-blur border border-zinc-700 text-zinc-200 px-3 py-2 rounded-lg flex items-center gap-2 text-xs font-medium hover:bg-indigo-600 hover:border-indigo-500 transition-all shadow-xl opacity-0 group-hover:opacity-100 focus:opacity-100"
+          title="Copy text to clipboard"
+        >
+          {isCopied ? <Check size={14} /> : <Copy size={14} />}
+          {isCopied ? 'Copied!' : 'Copy Text'}
+        </button>
+      )}
     </div>
   );
 };
