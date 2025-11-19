@@ -1,0 +1,5 @@
+{
+  "name": "ASCII painting",
+  "description": "Transform any image into dynamic, animated ASCII art. Use AI to generate source images or upload your own.",
+  "requestFramePermissions": []
+}
