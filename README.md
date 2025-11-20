@@ -8,19 +8,23 @@
 
 <a id="english-readme"></a>
 
-A powerful, interactive web application that transforms images into dynamic, animated ASCII art. It leverages the **Google Gemini API** (Imagen 3) to generate source images from text prompts and provides a highly customizable real-time rendering engine to convert them into character-based visuals.
+A powerful, interactive web application that transforms images into dynamic, animated ASCII art, Bead art, or High-Definition Pixel art. It leverages the **Google Gemini API** (Imagen 3) to generate source images from text prompts and provides a highly customizable real-time rendering engine.
 
 ## ✨ Features
 
 - **AI Image Generation**: Use prompts to create unique images via Google's Imagen model.
-- **Real-time Conversion**: Instant transformation of local uploads or AI-generated images into ASCII.
+- **Real-time Conversion**: Instant transformation of local uploads or AI-generated images.
+- **Triple Render Modes**:
+  - **ASCII**: Classic text-based character art.
+  - **Bead Art**: Colorful, pixel-perfect circle/bead grids (拼豆 style).
+  - **Pixel / HD**: Clear, high-definition pixelated rendering of the original image.
 - **Dynamic Animations**:
   - **Matrix**: Digital rain effects with flickering characters.
   - **Wave**: Sine-wave distortion animations.
   - **Jelly**: Wobbling elasticity effects.
   - **Scanline/Glitch**: Retro CRT monitor vibes.
-- **Full Customization**: Control resolution, font size, contrast, density/character sets, and colors.
-- **Export**: Copy the generated ASCII text directly to your clipboard.
+- **Full Customization**: Control resolution, font/cell size, contrast, density/character sets, and colors.
+- **Export**: Copy the generated ASCII text directly to your clipboard (ASCII mode only).
 
 ## 🚀 Getting Started
 
@@ -46,10 +50,10 @@ To use the AI generation features, you need a **Google Gemini API Key**.
 
 ## 🛠 Usage
 
-1.  **Upload or Generate**: Drag and drop an image file, or type a prompt (e.g., "A cyberpunk skull") and hit "Generate".
-2.  **Configure**: Use the sidebar to adjust the resolution and contrast to get the best look.
-3.  **Animate**: Select a mode like "Matrix" or "Wave" to bring the art to life.
-4.  **Copy**: Hover over the canvas and click "Copy Text" to save the ASCII representation to your clipboard.
+1.  **Upload or Generate**: Drag and drop an image file, or type a prompt.
+2.  **Choose Style**: Switch between **ASCII**, **Bead**, and **Pixel/HD** modes in the sidebar.
+3.  **Configure**: Adjust the resolution to control the level of detail. Increase resolution in **Pixel/HD** mode for a clearer image.
+4.  **Animate**: Select a mode like "Wave" or "Jelly" to distort the image in real-time.
 
 ---
 
@@ -67,19 +71,23 @@ To use the AI generation features, you need a **Google Gemini API Key**.
   </a>
 </div>
 
-这是一个强大的交互式 Web 应用程序，可将图像转换为动态的 ASCII 字符画。它利用 **Google Gemini API** (Imagen 3) 根据文本提示生成源图像，并提供高度可定制的实时渲染引擎，将其转换为基于字符的视觉效果。
+这是一个强大的交互式 Web 应用程序，可将图像转换为动态的 ASCII 字符画、拼豆画或高清像素画。它利用 **Google Gemini API** (Imagen 3) 根据文本提示生成源图像，并提供高度可定制的实时渲染引擎。
 
 ## ✨ 功能特性
 
 - **AI 图像生成**：使用 Google Imagen 模型通过文本提示词生成独特的图像。
-- **实时转换**：即时将本地上传的图片或 AI 生成的图片转换为 ASCII 画。
+- **实时转换**：即时将本地上传的图片或 AI 生成的图片转换为艺术画。
+- **三种渲染模式**：
+  - **ASCII**：经典的文本字符画。
+  - **拼豆艺术 (Bead Art)**：多彩的像素风格圆形网格。
+  - **像素/高清 (Pixel / HD)**：清晰的高清像素化原始图像渲染。
 - **动态动画**：
   - **黑客帝国 (Matrix)**：具有闪烁字符的数字雨效果。
   - **波浪 (Wave)**：正弦波扭曲动画。
   - **果冻 (Jelly)**：摆动弹性效果。
   - **扫描线/故障 (Scanline)**：复古 CRT 显示器风格。
-- **全面定制**：控制分辨率、字体大小、对比度、字符集密度和颜色。
-- **导出**：将生成的 ASCII 文本直接复制到剪贴板。
+- **全面定制**：控制分辨率、单元格大小、对比度、字符集密度和颜色。
+- **导出**：将生成的 ASCII 文本直接复制到剪贴板（仅限 ASCII 模式）。
 
 ## 🚀 快速开始
 
@@ -105,7 +113,7 @@ To use the AI generation features, you need a **Google Gemini API Key**.
 
 ## 🛠 使用指南
 
-1.  **上传或生成**：拖放图像文件，或输入提示词（例如，“赛博朋克骷髅”）并点击“生成”。
-2.  **配置**：使用侧边栏调整分辨率和对比度以获得最佳效果。
-3.  **动画**：选择“Matrix”或“Wave”等模式，让字符画动起来。
-4.  **复制**：将鼠标悬停在画布上，点击“复制文本”即可将 ASCII 字符画保存到剪贴板。
+1.  **上传或生成**：上传图片或输入提示词生成。
+2.  **选择风格**：在侧边栏中切换 **ASCII**、**Bead (拼豆)** 或 **Pixel/HD (高清)** 模式。
+3.  **配置**：调整分辨率以控制细节水平。在 **Pixel/HD** 模式下提高分辨率可获得更清晰的图像。
+4.  **动画**：选择“Wave”或“Jelly”等模式，实时扭曲和动画化图像。

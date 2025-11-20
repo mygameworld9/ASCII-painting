@@ -1,7 +1,8 @@
+
 import React from 'react';
-import { AsciiSettings, AnimationMode } from '../types';
+import { AsciiSettings, AnimationMode, RenderMode } from '../types';
 import { DENSITY_SETS } from '../constants';
-import { Settings2, Play, Zap, Monitor, Waves } from 'lucide-react';
+import { Settings2, Play, Zap, Monitor, Waves, Grid, Type, Image as ImageIcon, LayoutGrid } from 'lucide-react';
 
 interface ControlsProps {
   settings: AsciiSettings;
@@ -20,6 +21,61 @@ export const Controls: React.FC<ControlsProps> = ({ settings, onUpdate }) => {
       <div className="flex items-center gap-2 mb-2">
         <Settings2 className="w-5 h-5 text-indigo-400" />
         <h2 className="text-lg font-bold text-white">Configuration</h2>
+      </div>
+
+      {/* Render Mode */}
+      <div className="space-y-3">
+        <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Render Style</label>
+        <div className="grid grid-cols-2 gap-2 bg-zinc-800 p-1 rounded-lg">
+            <button
+                onClick={() => handleChange('renderMode', RenderMode.ASCII)}
+                className={`flex items-center justify-center gap-2 px-2 py-2 rounded-md text-[10px] md:text-xs font-medium transition-all ${
+                    settings.renderMode === RenderMode.ASCII
+                    ? 'bg-zinc-600 text-white shadow-sm'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+                title="ASCII Character Art"
+            >
+                <Type size={14} />
+                ASCII
+            </button>
+            <button
+                onClick={() => handleChange('renderMode', RenderMode.BEAD)}
+                className={`flex items-center justify-center gap-2 px-2 py-2 rounded-md text-[10px] md:text-xs font-medium transition-all ${
+                    settings.renderMode === RenderMode.BEAD
+                    ? 'bg-zinc-600 text-white shadow-sm'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+                title="Round Bead Art"
+            >
+                <Grid size={14} />
+                Bead
+            </button>
+            <button
+                onClick={() => handleChange('renderMode', RenderMode.PIXEL)}
+                className={`flex items-center justify-center gap-2 px-2 py-2 rounded-md text-[10px] md:text-xs font-medium transition-all ${
+                    settings.renderMode === RenderMode.PIXEL
+                    ? 'bg-zinc-600 text-white shadow-sm'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+                title="Pixel Art"
+            >
+                <LayoutGrid size={14} />
+                Pixel
+            </button>
+             <button
+                onClick={() => handleChange('renderMode', RenderMode.HD)}
+                className={`flex items-center justify-center gap-2 px-2 py-2 rounded-md text-[10px] md:text-xs font-medium transition-all ${
+                    settings.renderMode === RenderMode.HD
+                    ? 'bg-zinc-600 text-white shadow-sm'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+                title="Original High Definition"
+            >
+                <ImageIcon size={14} />
+                HD
+            </button>
+        </div>
       </div>
 
       {/* Animation Mode */}
@@ -50,32 +106,34 @@ export const Controls: React.FC<ControlsProps> = ({ settings, onUpdate }) => {
       </div>
 
       {/* Resolution */}
-      <div className="space-y-2">
+      <div className={`space-y-2 transition-opacity ${settings.renderMode === RenderMode.HD ? 'opacity-40 pointer-events-none' : ''}`}>
         <div className="flex justify-between">
-           <label className="text-xs font-semibold text-zinc-400">Resolution (Columns)</label>
+           <label className="text-xs font-semibold text-zinc-400">Resolution (Grid)</label>
            <span className="text-xs text-indigo-400 font-mono">{settings.resolution}px</span>
         </div>
         <input
           type="range"
-          min="40"
+          min="20"
           max="200"
-          step="10"
+          step="5"
           value={settings.resolution}
           onChange={(e) => handleChange('resolution', parseInt(e.target.value))}
           className="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
         />
       </div>
 
-      {/* Font Size */}
-      <div className="space-y-2">
+      {/* Font Size / Bead Size */}
+      <div className={`space-y-2 transition-opacity ${settings.renderMode === RenderMode.HD ? 'opacity-40 pointer-events-none' : ''}`}>
         <div className="flex justify-between">
-           <label className="text-xs font-semibold text-zinc-400">Font Size</label>
+           <label className="text-xs font-semibold text-zinc-400">
+             {settings.renderMode === RenderMode.ASCII ? 'Font Size' : 'Cell Size'}
+           </label>
            <span className="text-xs text-indigo-400 font-mono">{settings.fontSize}px</span>
         </div>
         <input
           type="range"
-          min="6"
-          max="24"
+          min="4"
+          max="32"
           step="1"
           value={settings.fontSize}
           onChange={(e) => handleChange('fontSize', parseInt(e.target.value))}
@@ -117,20 +175,22 @@ export const Controls: React.FC<ControlsProps> = ({ settings, onUpdate }) => {
         />
       </div>
 
-      {/* Colors */}
+      {/* Colors - Show only relevant controls */}
       <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-            <label className="text-xs font-semibold text-zinc-400">Text Color</label>
-            <div className="flex items-center gap-2">
-                <input 
-                    type="color" 
-                    value={settings.color}
-                    onChange={(e) => handleChange('color', e.target.value)}
-                    className="w-8 h-8 rounded cursor-pointer bg-transparent border-0"
-                />
-                <span className="text-xs font-mono text-zinc-500">{settings.color}</span>
+        {settings.renderMode === RenderMode.ASCII && (
+            <div className="space-y-2">
+                <label className="text-xs font-semibold text-zinc-400">Text Color</label>
+                <div className="flex items-center gap-2">
+                    <input 
+                        type="color" 
+                        value={settings.color}
+                        onChange={(e) => handleChange('color', e.target.value)}
+                        className="w-8 h-8 rounded cursor-pointer bg-transparent border-0"
+                    />
+                    <span className="text-xs font-mono text-zinc-500">{settings.color}</span>
+                </div>
             </div>
-        </div>
+        )}
         <div className="space-y-2">
             <label className="text-xs font-semibold text-zinc-400">Background</label>
             <div className="flex items-center gap-2">
@@ -145,21 +205,23 @@ export const Controls: React.FC<ControlsProps> = ({ settings, onUpdate }) => {
         </div>
       </div>
 
-      {/* Char Set */}
-      <div className="space-y-2">
-        <label className="text-xs font-semibold text-zinc-400">Character Set</label>
-        <select
-          className="w-full bg-zinc-800 text-zinc-300 text-xs rounded-md p-2 border border-zinc-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
-          onChange={(e) => handleChange('density', e.target.value)}
-          value={settings.density}
-        >
-          <option value={DENSITY_SETS.STANDARD}>Standard</option>
-          <option value={DENSITY_SETS.COMPLEX}>High Detail</option>
-          <option value={DENSITY_SETS.SIMPLE}>Simple</option>
-          <option value={DENSITY_SETS.BLOCKS}>Blocks</option>
-          <option value={DENSITY_SETS.MATRIX}>Matrix Katakana</option>
-        </select>
-      </div>
+      {/* Char Set - Only for ASCII */}
+      {settings.renderMode === RenderMode.ASCII && (
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-zinc-400">Character Set</label>
+            <select
+              className="w-full bg-zinc-800 text-zinc-300 text-xs rounded-md p-2 border border-zinc-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+              onChange={(e) => handleChange('density', e.target.value)}
+              value={settings.density}
+            >
+              <option value={DENSITY_SETS.STANDARD}>Standard</option>
+              <option value={DENSITY_SETS.COMPLEX}>High Detail</option>
+              <option value={DENSITY_SETS.SIMPLE}>Simple</option>
+              <option value={DENSITY_SETS.BLOCKS}>Blocks</option>
+              <option value={DENSITY_SETS.MATRIX}>Matrix Katakana</option>
+            </select>
+          </div>
+      )}
 
        {/* Invert */}
        <div className="flex items-center gap-3 pt-2">
@@ -170,7 +232,7 @@ export const Controls: React.FC<ControlsProps> = ({ settings, onUpdate }) => {
             onChange={(e) => handleChange('invert', e.target.checked)}
             className="w-4 h-4 rounded border-zinc-600 text-indigo-600 focus:ring-indigo-500 bg-zinc-800"
           />
-          <label htmlFor="invert" className="text-sm text-zinc-300 cursor-pointer select-none">Invert Brightness</label>
+          <label htmlFor="invert" className="text-sm text-zinc-300 cursor-pointer select-none">Invert {settings.renderMode === RenderMode.ASCII ? 'Brightness' : 'Colors'}</label>
       </div>
     </div>
   );

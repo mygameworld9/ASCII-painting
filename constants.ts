@@ -1,4 +1,4 @@
-import { AnimationMode } from "./types";
+import { AnimationMode, RenderMode } from "./types";
 
 export const DENSITY_SETS = {
   STANDARD: "Ñ@#W$9876543210?!abc;:+=-,._ ",
@@ -16,6 +16,7 @@ export const DEFAULT_SETTINGS = {
   contrast: 1.0,
   animationSpeed: 1.0,
   animationMode: AnimationMode.WAVE, // String matching enum for UI
+  renderMode: RenderMode.ASCII,
   fontSize: 10,
   invert: false,
 };

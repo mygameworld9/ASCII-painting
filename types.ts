@@ -1,9 +1,17 @@
+
 export enum AnimationMode {
   STATIC = 'STATIC',
   WAVE = 'WAVE',
   JELLY = 'JELLY',
   MATRIX = 'MATRIX',
   SCANLINE = 'SCANLINE'
+}
+
+export enum RenderMode {
+  ASCII = 'ASCII',
+  BEAD = 'BEAD',
+  PIXEL = 'PIXEL',
+  HD = 'HD'
 }
 
 export interface AsciiSettings {
@@ -14,6 +22,7 @@ export interface AsciiSettings {
   contrast: number; // 0.5 to 2.0
   animationSpeed: number;
   animationMode: AnimationMode;
+  renderMode: RenderMode;
   fontSize: number;
   invert: boolean;
 }

@@ -1,5 +1,6 @@
+
 import React, { useRef, useEffect, useState } from 'react';
-import { AsciiSettings, AnimationMode } from '../types';
+import { AsciiSettings, AnimationMode, RenderMode } from '../types';
 import { Copy, Check } from 'lucide-react';
 
 interface AsciiRendererProps {
@@ -25,7 +26,7 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
   }, [imageSrc]);
 
   const handleCopyAscii = () => {
-    if (!sourceImage) return;
+    if (!sourceImage || settings.renderMode !== RenderMode.ASCII) return;
 
     const cols = settings.resolution;
     const charW = settings.fontSize * 0.6;
@@ -83,12 +84,11 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
     if (!sourceImage || !canvasRef.current || !containerRef.current) return;
 
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d', { alpha: false }); // Optimize for no transparency if possible
+    const ctx = canvas.getContext('2d', { alpha: false }); 
     if (!ctx) return;
 
-    // Create offscreen canvas for pixel reading
     const offCanvas = document.createElement('canvas');
-    const offCtx = offCanvas.getContext('2d', { willReadFrequently: true }); // Optimize for frequent reads
+    const offCtx = offCanvas.getContext('2d', { willReadFrequently: true }); 
     
     if (!offCtx) return;
 
@@ -97,15 +97,122 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
     const renderFrame = () => {
       const now = Date.now();
       const elapsed = (now - startTime) * 0.001 * settings.animationSpeed;
+      
+      const isAscii = settings.renderMode === RenderMode.ASCII;
+      const isBead = settings.renderMode === RenderMode.BEAD;
+      const isPixel = settings.renderMode === RenderMode.PIXEL;
+      const isHD = settings.renderMode === RenderMode.HD;
 
+      // --- HD RENDER PATH ---
+      if (isHD) {
+          const container = containerRef.current;
+          if (!container) return;
+          
+          // Fill container maintaining aspect ratio
+          const maxWidth = container.clientWidth;
+          const maxHeight = container.clientHeight;
+          const imgAspect = sourceImage.width / sourceImage.height;
+          const containerAspect = maxWidth / maxHeight;
+
+          let drawW, drawH;
+          if (containerAspect > imgAspect) {
+              drawH = maxHeight;
+              drawW = maxHeight * imgAspect;
+          } else {
+              drawW = maxWidth;
+              drawH = maxWidth / imgAspect;
+          }
+
+          if (canvas.width !== drawW || canvas.height !== drawH) {
+              canvas.width = drawW;
+              canvas.height = drawH;
+          }
+
+          // Fill Background
+          ctx.fillStyle = settings.backgroundColor;
+          ctx.fillRect(0, 0, drawW, drawH);
+
+          // Filter for contrast/invert
+          const contrastVal = settings.contrast * 100;
+          const invertVal = settings.invert ? 100 : 0;
+          ctx.filter = `contrast(${contrastVal}%) invert(${invertVal}%)`;
+
+          // Animation Logic for HD
+          if (settings.animationMode === AnimationMode.WAVE) {
+              const amplitude = 10;
+              const frequency = 0.02;
+              const speed = 5;
+              
+              // Draw horizontal strips with offset
+              // We cannot do per-pixel in HD fast enough, so we slice
+              for (let y = 0; y < drawH; y++) {
+                  const offset = Math.sin(y * frequency + elapsed * speed) * amplitude;
+                  
+                  // Map dest y to source y
+                  const sy = (y / drawH) * sourceImage.height;
+                  const sH = sourceImage.height / drawH;
+
+                  ctx.drawImage(
+                      sourceImage, 
+                      0, sy, sourceImage.width, sH, // source
+                      offset, y, drawW, 1 // dest
+                  );
+              }
+          } else if (settings.animationMode === AnimationMode.JELLY) {
+               const bounceX = Math.sin(elapsed * 3) * 0.02;
+               const bounceY = Math.cos(elapsed * 2) * 0.02;
+               const rot = Math.sin(elapsed) * 0.02;
+
+               ctx.save();
+               ctx.translate(drawW/2, drawH/2);
+               ctx.scale(1 + bounceX, 1 + bounceY);
+               ctx.rotate(rot);
+               ctx.drawImage(sourceImage, -drawW/2, -drawH/2, drawW, drawH);
+               ctx.restore();
+
+          } else if (settings.animationMode === AnimationMode.SCANLINE) {
+               ctx.drawImage(sourceImage, 0, 0, drawW, drawH);
+               
+               // Overlay scanline
+               const scanY = (elapsed * 200) % drawH;
+               ctx.filter = 'none'; // Don't apply contrast to the scanline overlay itself? Actually we want clear overlay
+               ctx.fillStyle = 'rgba(255,255,255,0.1)';
+               ctx.fillRect(0, scanY, drawW, 10);
+
+               // Random glitch
+               if (Math.random() > 0.97) {
+                   const h = Math.random() * 50;
+                   const y = Math.random() * drawH;
+                   const xOff = (Math.random() - 0.5) * 20;
+                   ctx.drawImage(canvas, 0, y, drawW, h, xOff, y, drawW, h);
+               }
+
+          } else {
+               // Static / Matrix fallback
+               ctx.drawImage(sourceImage, 0, 0, drawW, drawH);
+          }
+          
+          ctx.filter = 'none';
+          animationRef.current = requestAnimationFrame(renderFrame);
+          return;
+      }
+
+      // --- GRID RENDER PATH (ASCII, BEAD, PIXEL) ---
+      
       // Determine dimensions
-      // Resolution setting determines the number of columns
       const cols = settings.resolution;
-      const charW = settings.fontSize * 0.6; // Approximate aspect ratio for mono font
+      
+      // Beads and Pixels are square (using fontSize as side length)
+      // ASCII is rectangular (fontSize * 0.6 width)
+      const charW = isAscii ? settings.fontSize * 0.6 : settings.fontSize;
       const charH = settings.fontSize;
       
       const aspectRatio = sourceImage.height / sourceImage.width;
-      const rows = Math.floor(cols * aspectRatio * (charW / charH)); // Adjust for char aspect ratio
+      
+      // Adjust grid ratio. ASCII needs (charW/charH) to maintain image aspect ratio.
+      // Bead/Pixel use 1.0 square ratio.
+      const gridRatio = isAscii ? (charW / charH) : 1.0;
+      const rows = Math.floor(cols * aspectRatio * gridRatio); 
 
       // Canvas size (Display)
       const targetWidth = cols * charW;
@@ -116,16 +223,10 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
         canvas.height = targetHeight;
       }
 
-      // Resize source image to our grid size (cols x rows) for easier color sampling
+      // Resize source image to our grid size (cols x rows)
       offCanvas.width = cols;
       offCanvas.height = rows;
-      
-      // Draw image to offscreen context
-      // Clear offscreen
       offCtx.clearRect(0, 0, cols, rows);
-      
-      // Apply contrast filter directly to source if possible, or manual math later
-      // Using manual math for control
       offCtx.drawImage(sourceImage, 0, 0, cols, rows);
       
       const imageData = offCtx.getImageData(0, 0, cols, rows);
@@ -135,11 +236,12 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
       ctx.fillStyle = settings.backgroundColor;
       ctx.fillRect(0, 0, targetWidth, targetHeight);
 
-      // Set Font
-      ctx.font = `bold ${settings.fontSize}px "JetBrains Mono", monospace`;
-      ctx.textBaseline = 'top';
+      // Setup for ASCII
+      if (isAscii) {
+          ctx.font = `bold ${settings.fontSize}px "JetBrains Mono", monospace`;
+          ctx.textBaseline = 'top';
+      }
       
-      // Pre-calculate chars
       const chars = settings.density;
       const charLen = chars.length;
 
@@ -151,7 +253,6 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
           let sampleX = x;
           let sampleY = y;
 
-          // Apply Distortions based on mode
           if (settings.animationMode === AnimationMode.WAVE) {
             const wave = Math.sin(x * 0.1 + elapsed * 2) * 2;
             sampleY = Math.floor(y + wave);
@@ -161,14 +262,12 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
              sampleX = Math.floor(x + waveX);
              sampleY = Math.floor(y + waveY);
           } else if (settings.animationMode === AnimationMode.SCANLINE) {
-             // Scanline scrolling effect
              const scan = Math.floor((elapsed * 10) % rows);
              if (Math.abs(y - scan) < 2) {
                sampleX = Math.floor(x + (Math.random() - 0.5) * 2);
              }
           }
 
-          // Clamping
           sampleX = Math.max(0, Math.min(cols - 1, sampleX));
           sampleY = Math.max(0, Math.min(rows - 1, sampleY));
 
@@ -185,40 +284,57 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
              b = factor * (b - 128) + 128;
           }
 
-          // Grayscale conversion
-          let brightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-          if (settings.invert) brightness = 1.0 - brightness;
-
-          // Map to char
-          // Ensure index is within bounds
-          const charIndex = Math.floor(Math.max(0, Math.min(1, brightness)) * (charLen - 1));
-          let char = chars[charIndex];
-
-          // Matrix Mode Specifics: Random character switching for active "rain" columns would be cool,
-          // but for simple "image to matrix" let's just flicker brighter chars.
-          if (settings.animationMode === AnimationMode.MATRIX) {
-            // Green color is handled by fillStyle, but let's vary brightness
-            const flicker = Math.random() > 0.9 ? 0.5 : 1;
-            ctx.globalAlpha = Math.max(0, Math.min(1, brightness * flicker));
-            // Occasionally swap char
-            if (Math.random() > 0.95) {
-               char = chars[Math.floor(Math.random() * charLen)];
-            }
-          } else {
-            ctx.globalAlpha = 1;
+          // Invert Colors for Bead/Pixel Mode if needed
+          if (settings.invert && !isAscii) {
+             r = 255 - r;
+             g = 255 - g;
+             b = 255 - b;
           }
 
-          // Color Handling
-          if (settings.animationMode === AnimationMode.SCANLINE) {
-             // RGB shift
-             ctx.fillStyle = settings.color;
-             if (Math.random() > 0.98) ctx.fillStyle = '#fff';
-          } else {
-             ctx.fillStyle = settings.color;
-          }
+          if (isBead) {
+              // Bead Rendering
+              const cx = x * charW + charW / 2;
+              const cy = y * charH + charH / 2;
+              const radius = (charW / 2) * 0.85; 
+              
+              ctx.fillStyle = `rgb(${r},${g},${b})`;
+              ctx.beginPath();
+              ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+              ctx.fill();
 
-          // Draw Char
-          ctx.fillText(char, x * charW, y * charH);
+          } else if (isPixel) {
+              // Pixel Rendering
+              ctx.fillStyle = `rgb(${r},${g},${b})`;
+              // +0.5 to prevent sub-pixel rendering gaps
+              ctx.fillRect(x * charW, y * charH, charW + 0.5, charH + 0.5);
+
+          } else {
+              // ASCII Rendering
+              let brightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+              if (settings.invert) brightness = 1.0 - brightness;
+
+              const charIndex = Math.floor(Math.max(0, Math.min(1, brightness)) * (charLen - 1));
+              let char = chars[charIndex];
+
+              if (settings.animationMode === AnimationMode.MATRIX) {
+                const flicker = Math.random() > 0.9 ? 0.5 : 1;
+                ctx.globalAlpha = Math.max(0, Math.min(1, brightness * flicker));
+                if (Math.random() > 0.95) {
+                   char = chars[Math.floor(Math.random() * charLen)];
+                }
+              } else {
+                ctx.globalAlpha = 1;
+              }
+
+              if (settings.animationMode === AnimationMode.SCANLINE) {
+                 ctx.fillStyle = settings.color;
+                 if (Math.random() > 0.98) ctx.fillStyle = '#fff';
+              } else {
+                 ctx.fillStyle = settings.color;
+              }
+
+              ctx.fillText(char, x * charW, y * charH);
+          }
         }
       }
       
@@ -243,10 +359,10 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
       <canvas 
         ref={canvasRef} 
         className="max-w-full max-h-full object-contain"
-        style={{ imageRendering: 'pixelated' }}
+        style={{ imageRendering: settings.renderMode === RenderMode.HD ? 'auto' : 'pixelated' }}
       />
 
-      {sourceImage && (
+      {sourceImage && settings.renderMode === RenderMode.ASCII && (
         <button
           onClick={handleCopyAscii}
           className="absolute top-4 right-4 bg-zinc-900/80 backdrop-blur border border-zinc-700 text-zinc-200 px-3 py-2 rounded-lg flex items-center gap-2 text-xs font-medium hover:bg-indigo-600 hover:border-indigo-500 transition-all shadow-xl opacity-0 group-hover:opacity-100 focus:opacity-100"
