@@ -3,7 +3,7 @@
 import React from 'react';
 import { AsciiSettings, AnimationMode, RenderMode } from '../types';
 import { DENSITY_SETS } from '../constants';
-import { Settings2, Play, Zap, Monitor, Waves, Grid, Type, LayoutGrid, Tag, Box, RotateCcw, RotateCw } from 'lucide-react';
+import { Settings2, Play, Zap, Monitor, Waves, Grid, Type, LayoutGrid, Tag, Box, RotateCcw, RotateCw, Sparkles, ScanFace } from 'lucide-react';
 
 interface ControlsProps {
   settings: AsciiSettings;
@@ -148,6 +148,7 @@ export const Controls: React.FC<ControlsProps> = ({
             { mode: AnimationMode.JELLY, icon: <Zap size={14}/>, label: 'Jelly' },
             { mode: AnimationMode.MATRIX, icon: <Play size={14}/>, label: 'Matrix' },
             { mode: AnimationMode.SCANLINE, icon: <Monitor size={14}/>, label: 'Glitch' },
+            { mode: AnimationMode.PARTICLES, icon: <Sparkles size={14}/>, label: 'Particles' },
           ].map((item) => (
             <button
               key={item.mode}
@@ -186,7 +187,7 @@ export const Controls: React.FC<ControlsProps> = ({
             />
         </div>
 
-        {/* Animation Intensity - Only if not STATIC */}
+        {/* Animation Intensity */}
         {settings.animationMode !== AnimationMode.STATIC && (
             <div className="space-y-2 animate-in slide-in-from-top-2 duration-200">
             <div className="flex justify-between">
@@ -204,6 +205,33 @@ export const Controls: React.FC<ControlsProps> = ({
                 onTouchEnd={() => onCommit(settings)}
                 className="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
             />
+            </div>
+        )}
+
+        {/* Extraction Threshold (Particles Mode Only) */}
+        {settings.animationMode === AnimationMode.PARTICLES && (
+             <div className="space-y-2 animate-in slide-in-from-top-2 duration-200 bg-indigo-500/5 p-2 rounded-lg border border-indigo-500/10">
+                <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                        <ScanFace size={14} className="text-indigo-400"/>
+                        <label className="text-xs font-semibold text-zinc-300">Subject Threshold</label>
+                    </div>
+                    <span className="text-xs text-indigo-400 font-mono">{settings.extractionThreshold}</span>
+                </div>
+                <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={settings.extractionThreshold}
+                    onChange={(e) => handleChange('extractionThreshold', parseInt(e.target.value), false)}
+                    onMouseUp={() => onCommit(settings)}
+                    onTouchEnd={() => onCommit(settings)}
+                    className="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                />
+                <p className="text-[10px] text-zinc-500 leading-tight">
+                    Adjust to separate character from background. Higher = stricter.
+                </p>
             </div>
         )}
       </div>

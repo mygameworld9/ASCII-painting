@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { AsciiSettings, AnimationMode, RenderMode } from '../types';
 import { Copy, Check, Palette, Download } from 'lucide-react';
@@ -28,6 +27,7 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
   const colorIdMapRef = useRef<Map<string, number>>(new Map());
   const paletteRef = useRef<PaletteItem[]>([]);
   const dimensionsRef = useRef({ cols: 0, rows: 0, charW: 0, charH: 0 });
+  const subjectMapRef = useRef<Uint8Array | null>(null);
 
   const [sourceImage, setSourceImage] = useState<HTMLImageElement | null>(null);
   const [isCopied, setIsCopied] = useState(false);
@@ -140,6 +140,70 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
 
   }, [sourceImage, settings.resolution, settings.renderMode, settings.fontSize]);
 
+  // 1.5 CALCULATE SUBJECT MAP (For Particle Mode)
+  // Pre-calculate edge/subject detection to improve render performance
+  useEffect(() => {
+      const pixels = pixelDataRef.current;
+      const { cols, rows } = dimensionsRef.current;
+      
+      if (!pixels || cols === 0 || rows === 0) {
+          subjectMapRef.current = null;
+          return;
+      }
+
+      // Only calculate if needed (though fairly cheap, keeps render loop clean)
+      const map = new Uint8Array(cols * rows);
+      const threshold = settings.extractionThreshold;
+      
+      for (let y = 0; y < rows; y++) {
+          for (let x = 0; x < cols; x++) {
+              const idx = (y * cols + x) * 4;
+              // Get brightness
+              const lum = (pixels[idx] + pixels[idx+1] + pixels[idx+2]) / 3;
+              
+              let diff = 0;
+              let neighbors = 0;
+
+              // Check 4 neighbors for robust edge detection
+              // Right
+              if (x < cols - 1) {
+                  const nIdx = idx + 4;
+                  const nLum = (pixels[nIdx] + pixels[nIdx+1] + pixels[nIdx+2]) / 3;
+                  diff += Math.abs(nLum - lum);
+                  neighbors++;
+              }
+              // Down
+              if (y < rows - 1) {
+                   const nIdx = idx + cols * 4;
+                   const nLum = (pixels[nIdx] + pixels[nIdx+1] + pixels[nIdx+2]) / 3;
+                   diff += Math.abs(nLum - lum);
+                   neighbors++;
+              }
+              // Left
+              if (x > 0) {
+                  const nIdx = idx - 4;
+                  const nLum = (pixels[nIdx] + pixels[nIdx+1] + pixels[nIdx+2]) / 3;
+                  diff += Math.abs(nLum - lum);
+                  neighbors++;
+              }
+              // Up
+              if (y > 0) {
+                  const nIdx = idx - cols * 4;
+                  const nLum = (pixels[nIdx] + pixels[nIdx+1] + pixels[nIdx+2]) / 3;
+                  diff += Math.abs(nLum - lum);
+                  neighbors++;
+              }
+              
+              const avgDiff = neighbors > 0 ? diff / neighbors : 0;
+              
+              // If difference is high enough, it's an edge/subject detail
+              map[y * cols + x] = avgDiff > threshold ? 1 : 0;
+          }
+      }
+      subjectMapRef.current = map;
+
+  }, [pixelDataRef.current, settings.extractionThreshold, dimensionsRef.current]);
+
 
   // 2. CALCULATE PALETTE (Bead Mode Only)
   // This runs when Pixel Data, Contrast, Invert, or RenderMode changes.
@@ -242,6 +306,7 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
       const isBead = settings.renderMode === RenderMode.BEAD;
       const isPixel = settings.renderMode === RenderMode.PIXEL;
       const isMinecraft = settings.renderMode === RenderMode.MINECRAFT;
+      const isParticleMode = settings.animationMode === AnimationMode.PARTICLES;
 
       const targetWidth = cols * charW;
       const targetHeight = rows * charH;
@@ -270,13 +335,37 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
       const chars = settings.density;
       const charLen = chars.length;
       const colorMap = colorIdMapRef.current;
+      const subjectMap = subjectMapRef.current;
 
       for (let y = 0; y < rows; y++) {
         for (let x = 0; x < cols; x++) {
           
           let sampleX = x;
           let sampleY = y;
+          let particleOffsetX = 0;
+          let particleOffsetY = 0;
+          
+          // Particle Mode - Extraction & Animation
+          if (isParticleMode) {
+              // Check pre-calculated map
+              let isSubject = true;
+              if (subjectMap) {
+                  isSubject = subjectMap[y * cols + x] === 1;
+              }
 
+              if (!isSubject) {
+                  // Completely skip background pixels for "Extracted" look
+                  continue; 
+              } else {
+                 // Particle Float Effect for Subject
+                 const phase = (x * 0.05) + (y * 0.05);
+                 // Drift upwards slowly + breathe
+                 particleOffsetX = Math.sin(elapsed + phase) * (intensity * 2);
+                 particleOffsetY = (Math.cos(elapsed * 1.2 + phase) * (intensity * 2)) - ((elapsed * 5) % 4);
+              }
+          }
+
+          // Other Animation Logic
           if (settings.animationMode === AnimationMode.WAVE) {
             const wave = Math.sin(x * 0.1 + elapsed * 2) * (2 * intensity);
             sampleY = Math.floor(y + wave);
@@ -303,7 +392,7 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
           let g = pixels[pixelIndex + 1];
           let b = pixels[pixelIndex + 2];
           let a = pixels[pixelIndex + 3];
-          
+
           // Corrected Contrast Algorithm (Standard linear multiplier)
           if (settings.contrast !== 1.0) {
              r = (r - 128) * settings.contrast + 128;
@@ -321,9 +410,12 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
              g = 255 - g;
              b = 255 - b;
           }
+          
+          // Apply particle offsets to draw position
+          const drawX = x * charW + particleOffsetX;
+          const drawY = y * charH + particleOffsetY;
 
           if (isBead) {
-              // Quantize for bead color consistency, but use finer step (4) for gradients
               const qr = Math.min(255, Math.round(r / 4) * 4);
               const qg = Math.min(255, Math.round(g / 4) * 4);
               const qb = Math.min(255, Math.round(b / 4) * 4);
@@ -331,8 +423,8 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
               
               if (qa < 10) continue;
 
-              const cx = x * charW + charW / 2;
-              const cy = y * charH + charH / 2;
+              const cx = drawX + charW / 2;
+              const cy = drawY + charH / 2;
               const radius = (charW / 2) * 0.85; 
               
               ctx.fillStyle = `rgba(${qr},${qg},${qb},${qa/255})`;
@@ -353,24 +445,22 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
           } else if (isPixel) {
               if (a < 5) continue;
               ctx.fillStyle = `rgba(${r},${g},${b},${a/255})`;
-              ctx.fillRect(x * charW, y * charH, charW + 0.5, charH + 0.5);
+              ctx.fillRect(drawX, drawY, charW + 0.5, charH + 0.5);
 
           } else if (isMinecraft) {
               if (a < 20) continue;
-              const cx = x * charW;
-              const cy = y * charH;
               
               ctx.fillStyle = `rgba(${r},${g},${b},${a/255})`;
-              ctx.fillRect(cx, cy, charW + 0.5, charH + 0.5);
+              ctx.fillRect(drawX, drawY, charW + 0.5, charH + 0.5);
 
               if (a > 200) {
                   const bevel = Math.max(1, Math.floor(charW * 0.12));
                   ctx.fillStyle = 'rgba(255,255,255,0.2)';
-                  ctx.fillRect(cx, cy, charW, bevel);
-                  ctx.fillRect(cx, cy, bevel, charH);
+                  ctx.fillRect(drawX, drawY, charW, bevel);
+                  ctx.fillRect(drawX, drawY, bevel, charH);
                   ctx.fillStyle = 'rgba(0,0,0,0.2)';
-                  ctx.fillRect(cx, cy + charH - bevel, charW, bevel);
-                  ctx.fillRect(cx + charW - bevel, cy, bevel, charH);
+                  ctx.fillRect(drawX, drawY + charH - bevel, charW, bevel);
+                  ctx.fillRect(drawX + charW - bevel, drawY, bevel, charH);
               }
 
           } else {
@@ -400,7 +490,7 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
                  ctx.fillStyle = settings.color;
               }
 
-              ctx.fillText(char, x * charW, y * charH);
+              ctx.fillText(char, drawX, drawY);
               ctx.globalAlpha = 1.0; 
           }
         }

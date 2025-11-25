@@ -5,7 +5,8 @@ export enum AnimationMode {
   WAVE = 'WAVE',
   JELLY = 'JELLY',
   MATRIX = 'MATRIX',
-  SCANLINE = 'SCANLINE'
+  SCANLINE = 'SCANLINE',
+  PARTICLES = 'PARTICLES'
 }
 
 export enum RenderMode {
@@ -28,6 +29,7 @@ export interface AsciiSettings {
   fontSize: number;
   invert: boolean;
   showLabels: boolean;
+  extractionThreshold: number; // 0 to 100, determines what is "background" vs "subject"
 }
 
 export interface GeneratedImage {

@@ -23,4 +23,5 @@ export const DEFAULT_SETTINGS = {
   fontSize: 10,
   invert: false,
   showLabels: false,
+  extractionThreshold: 20, // Default variance threshold for subject extraction
 };
