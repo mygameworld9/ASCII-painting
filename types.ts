@@ -1,4 +1,5 @@
 
+
 export enum AnimationMode {
   STATIC = 'STATIC',
   WAVE = 'WAVE',
@@ -11,7 +12,7 @@ export enum RenderMode {
   ASCII = 'ASCII',
   BEAD = 'BEAD',
   PIXEL = 'PIXEL',
-  HD = 'HD'
+  MINECRAFT = 'MINECRAFT'
 }
 
 export interface AsciiSettings {
@@ -21,10 +22,12 @@ export interface AsciiSettings {
   backgroundColor: string;
   contrast: number; // 0.5 to 2.0
   animationSpeed: number;
+  animationIntensity: number; // New control for amplitude/strength
   animationMode: AnimationMode;
   renderMode: RenderMode;
   fontSize: number;
   invert: boolean;
+  showLabels: boolean;
 }
 
 export interface GeneratedImage {

@@ -1,28 +1,57 @@
-import React, { useState, useCallback, useRef } from 'react';
+
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { AsciiRenderer } from './components/AsciiRenderer';
 import { Controls } from './components/Controls';
 import { Button } from './components/Button';
 import { AsciiSettings, AnimationMode } from './types';
 import { DEFAULT_SETTINGS } from './constants';
 import { generateAIImage, generateCreativePrompt } from './services/geminiService';
-import { Upload, Wand2, Image as ImageIcon, Info, X } from 'lucide-react';
+import { Upload, Wand2, Image as ImageIcon, Info, X, Plus, Trash2 } from 'lucide-react';
+
+interface GalleryItem {
+  id: string;
+  url: string;
+  name: string;
+}
 
 const App: React.FC = () => {
-  const [image, setImage] = useState<string | null>(null);
+  // Gallery State
+  const [gallery, setGallery] = useState<GalleryItem[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  // History State
+  const [history, setHistory] = useState<AsciiSettings[]>([DEFAULT_SETTINGS]);
+  const [historyIndex, setHistoryIndex] = useState(0);
   const [settings, setSettings] = useState<AsciiSettings>(DEFAULT_SETTINGS);
+  
   const [isGenerating, setIsGenerating] = useState(false);
   const [isPromptLoading, setIsPromptLoading] = useState(false);
   const [promptInput, setPromptInput] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+
+  const activeImage = gallery.find(img => img.id === activeId);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const url = URL.createObjectURL(file);
-      setImage(url);
+    const files = event.target.files;
+    if (files && files.length > 0) {
+      const newItems: GalleryItem[] = Array.from(files).map((file: File) => ({
+        id: Math.random().toString(36).substring(2, 9) + Date.now().toString(36),
+        url: URL.createObjectURL(file),
+        name: file.name
+      }));
+      
+      setGallery(prev => [...prev, ...newItems]);
+      // If no active image, select the first new one
+      if (!activeId && newItems.length > 0) {
+        setActiveId(newItems[0].id);
+      }
     }
+    // Reset inputs
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (galleryInputRef.current) galleryInputRef.current.value = '';
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -38,10 +67,23 @@ const App: React.FC = () => {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file && file.type.startsWith('image/')) {
-      const url = URL.createObjectURL(file);
-      setImage(url);
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+       const newItems: GalleryItem[] = [];
+       Array.from(files).forEach((file: File) => {
+         if (file.type.startsWith('image/')) {
+             newItems.push({
+               id: Math.random().toString(36).substring(2, 9) + Date.now().toString(36),
+               url: URL.createObjectURL(file),
+               name: file.name
+             });
+         }
+       });
+
+       if (newItems.length > 0) {
+         setGallery(prev => [...prev, ...newItems]);
+         if (!activeId) setActiveId(newItems[0].id);
+       }
     }
   };
 
@@ -51,7 +93,13 @@ const App: React.FC = () => {
     setIsGenerating(true);
     try {
       const base64Image = await generateAIImage(promptInput);
-      setImage(base64Image);
+      const newItem: GalleryItem = {
+          id: Math.random().toString(36).substring(2, 9) + Date.now().toString(36),
+          url: base64Image,
+          name: `AI-${promptInput.slice(0, 10)}.jpg`
+      };
+      setGallery(prev => [...prev, newItem]);
+      setActiveId(newItem.id);
     } catch (error) {
       alert("Failed to generate image. Check API Key or try again.");
     } finally {
@@ -71,9 +119,55 @@ const App: React.FC = () => {
       }
   }
 
-  const clearImage = () => {
-    setImage(null);
+  const clearGallery = () => {
+    setGallery([]);
+    setActiveId(null);
     setPromptInput("");
+  };
+
+  const removeImage = (e: React.MouseEvent, idToRemove: string) => {
+      e.stopPropagation();
+      setGallery(prev => {
+          const newGallery = prev.filter(item => item.id !== idToRemove);
+          // If we removed the active image, switch to the previous one or null
+          if (activeId === idToRemove) {
+              setActiveId(newGallery.length > 0 ? newGallery[newGallery.length - 1].id : null);
+          }
+          return newGallery;
+      });
+  };
+
+  // Settings Management
+  const handleSettingsUpdate = (newSettings: AsciiSettings) => {
+    setSettings(newSettings);
+  };
+
+  const handleCommit = (settingsToCommit: AsciiSettings) => {
+    // Prevent duplicates
+    if (JSON.stringify(history[historyIndex]) === JSON.stringify(settingsToCommit)) {
+        return;
+    }
+
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(settingsToCommit);
+    setHistory(newHistory);
+    setHistoryIndex(newHistory.length - 1);
+  };
+
+  const handleUndo = () => {
+    if (historyIndex > 0) {
+        const newIndex = historyIndex - 1;
+        setHistoryIndex(newIndex);
+        setSettings(history[newIndex]);
+    }
+  };
+
+  const handleRedo = () => {
+    if (historyIndex < history.length - 1) {
+        const newIndex = historyIndex + 1;
+        setHistoryIndex(newIndex);
+        setSettings(history[newIndex]);
+    }
   };
 
   return (
@@ -89,7 +183,8 @@ const App: React.FC = () => {
         <div className="absolute inset-0 z-50 bg-indigo-500/20 backdrop-blur-sm border-4 border-dashed border-indigo-500 m-4 rounded-3xl flex items-center justify-center pointer-events-none">
             <div className="bg-zinc-900/90 p-6 rounded-2xl shadow-2xl flex flex-col items-center gap-4">
                 <Upload size={48} className="text-indigo-400 animate-bounce" />
-                <h2 className="text-2xl font-bold text-white">Drop Image Here</h2>
+                <h2 className="text-2xl font-bold text-white">Drop Images Here</h2>
+                <p className="text-zinc-400">Add to Batch Gallery</p>
             </div>
         </div>
       )}
@@ -98,8 +193,8 @@ const App: React.FC = () => {
       <main className="flex-1 flex flex-col h-full relative">
         
         {/* Header */}
-        <header className="h-16 border-b border-zinc-800 flex items-center justify-between px-6 bg-zinc-900/50 backdrop-blur-sm z-10">
-          <div className="flex items-center gap-3 cursor-pointer" onClick={clearImage}>
+        <header className="h-16 border-b border-zinc-800 flex items-center justify-between px-6 bg-zinc-900/50 backdrop-blur-sm z-10 flex-shrink-0">
+          <div className="flex items-center gap-3 cursor-pointer" onClick={clearGallery}>
             <div className="w-8 h-8 bg-indigo-600 rounded flex items-center justify-center shadow-lg shadow-indigo-500/20">
                <span className="font-mono font-bold text-lg">A</span>
             </div>
@@ -107,20 +202,27 @@ const App: React.FC = () => {
           </div>
           
           <div className="flex items-center gap-4">
-            {image && (
+            {gallery.length > 0 && (
                 <button 
-                    onClick={clearImage}
-                    className="text-sm text-zinc-400 hover:text-white px-3 py-1.5 hover:bg-zinc-800 rounded-md transition-colors flex items-center gap-2"
+                    onClick={clearGallery}
+                    className="text-xs text-zinc-400 hover:text-red-400 px-3 py-1.5 hover:bg-zinc-800 rounded-md transition-colors flex items-center gap-2"
                 >
-                    <X size={14} />
-                    Clear
+                    <Trash2 size={14} />
+                    Clear All
                 </button>
             )}
             <label className="cursor-pointer group relative">
-               <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
+               <input 
+                    ref={fileInputRef}
+                    type="file" 
+                    accept="image/*" 
+                    multiple 
+                    onChange={handleFileUpload} 
+                    className="hidden" 
+               />
                <div className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-all px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 border border-zinc-700">
-                  <Upload size={16} />
-                  <span>Upload</span>
+                  <Plus size={16} />
+                  <span>Upload Images</span>
                </div>
             </label>
           </div>
@@ -131,19 +233,24 @@ const App: React.FC = () => {
             {/* Grid Background Effect */}
             <div className="absolute inset-0 bg-[linear-gradient(to_right,#1f1f1f_1px,transparent_1px),linear-gradient(to_bottom,#1f1f1f_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] pointer-events-none opacity-20" />
             
-            {image ? (
-               <AsciiRenderer imageSrc={image} settings={settings} />
+            {activeImage ? (
+               <div className="w-full h-full flex flex-col relative z-10">
+                   {/* Renderer */}
+                   <div className="flex-1 min-h-0 pb-4">
+                        <AsciiRenderer imageSrc={activeImage.url} settings={settings} />
+                   </div>
+               </div>
             ) : (
-               <div className="text-center max-w-md z-10 w-full mx-auto animate-in fade-in zoom-in duration-300">
+               <div className="text-center max-w-md z-10 w-full mx-auto animate-in fade-in zoom-in duration-300 pb-20">
                   <div className="w-24 h-24 bg-zinc-900/50 rounded-3xl mx-auto mb-8 flex items-center justify-center border border-zinc-800 shadow-2xl shadow-indigo-500/5 backdrop-blur-sm">
                     <ImageIcon size={40} className="text-indigo-500" />
                   </div>
                   
                   <h2 className="text-3xl font-bold mb-3 text-white tracking-tight">
-                    Create ASCII Art
+                    Batch Design Studio
                   </h2>
                   <p className="text-zinc-400 mb-8 leading-relaxed text-sm max-w-xs mx-auto">
-                    Upload your own image or generate one with AI. Watch it come to life with ASCII animation.
+                    Upload multiple images to design in batch, or generate one with AI.
                   </p>
                   
                   {/* AI Generation Box */}
@@ -175,45 +282,61 @@ const App: React.FC = () => {
                         Generate & Convert
                      </Button>
                   </div>
-
-                  {/* Divider */}
-                  <div className="flex items-center gap-4 mb-8 opacity-50">
-                     <div className="h-px bg-zinc-700 flex-1"></div>
-                     <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">OR</span>
-                     <div className="h-px bg-zinc-700 flex-1"></div>
-                  </div>
-
-                  {/* Manual Upload Area */}
-                  <button 
-                    onClick={() => fileInputRef.current?.click()}
-                    className="w-full flex items-center justify-center gap-4 py-5 rounded-2xl border border-dashed border-zinc-700 hover:border-indigo-500/50 hover:bg-zinc-800/30 transition-all group bg-zinc-900/20"
-                  >
-                    <div className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center group-hover:scale-110 group-hover:bg-indigo-500/20 transition-all duration-300">
-                        <Upload size={20} className="text-zinc-400 group-hover:text-indigo-400" />
-                    </div>
-                    <div className="text-left">
-                        <div className="text-sm font-semibold text-zinc-200 group-hover:text-white">Upload Local Image</div>
-                        <div className="text-xs text-zinc-500 group-hover:text-zinc-400 mt-0.5">Support JPG, PNG, WEBP</div>
-                    </div>
-                  </button>
-                  
-                  {/* Hidden Input for Center Button */}
-                  <input 
-                    ref={fileInputRef}
-                    type="file" 
-                    accept="image/*" 
-                    className="hidden" 
-                    onChange={handleFileUpload}
-                  />
-
                </div>
             )}
         </div>
+
+        {/* Gallery Strip */}
+        {gallery.length > 0 && (
+             <div className="h-24 bg-zinc-900 border-t border-zinc-800 flex items-center gap-2 px-4 overflow-x-auto flex-shrink-0 z-20">
+                 {gallery.map((item) => (
+                     <div 
+                        key={item.id} 
+                        onClick={() => setActiveId(item.id)}
+                        className={`relative group flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${
+                            activeId === item.id 
+                            ? 'border-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)] scale-105' 
+                            : 'border-zinc-700 hover:border-zinc-500 opacity-70 hover:opacity-100'
+                        }`}
+                     >
+                         <img src={item.url} alt="thumbnail" className="w-full h-full object-cover" />
+                         <button 
+                            onClick={(e) => removeImage(e, item.id)}
+                            className="absolute top-0 right-0 bg-black/60 p-0.5 rounded-bl text-zinc-300 hover:text-red-400 hover:bg-black opacity-0 group-hover:opacity-100 transition-all"
+                         >
+                             <X size={10} />
+                         </button>
+                     </div>
+                 ))}
+                 
+                 {/* Add Button in Strip */}
+                 <label className="flex-shrink-0 w-16 h-16 rounded-lg border-2 border-dashed border-zinc-700 hover:border-indigo-500/50 hover:bg-zinc-800 cursor-pointer flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-indigo-400 transition-all">
+                     <Plus size={16} />
+                     <span className="text-[8px] font-bold uppercase">Add</span>
+                     <input 
+                        ref={galleryInputRef}
+                        type="file" 
+                        accept="image/*" 
+                        multiple 
+                        onChange={handleFileUpload} 
+                        className="hidden" 
+                   />
+                 </label>
+             </div>
+        )}
       </main>
 
       {/* Sidebar */}
       <aside className="hidden md:block h-full border-l border-zinc-800 relative z-20 shadow-xl w-80 flex-shrink-0">
-         <Controls settings={settings} onUpdate={setSettings} />
+         <Controls 
+            settings={settings} 
+            onUpdate={handleSettingsUpdate} 
+            onCommit={handleCommit}
+            onUndo={handleUndo}
+            onRedo={handleRedo}
+            canUndo={historyIndex > 0}
+            canRedo={historyIndex < history.length - 1}
+         />
       </aside>
       
     </div>

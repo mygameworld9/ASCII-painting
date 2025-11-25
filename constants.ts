@@ -1,3 +1,5 @@
+
+
 import { AnimationMode, RenderMode } from "./types";
 
 export const DENSITY_SETS = {
@@ -15,8 +17,10 @@ export const DEFAULT_SETTINGS = {
   backgroundColor: '#000000',
   contrast: 1.0,
   animationSpeed: 1.0,
-  animationMode: AnimationMode.WAVE, // String matching enum for UI
+  animationIntensity: 1.0,
+  animationMode: AnimationMode.STATIC, // Changed to STATIC
   renderMode: RenderMode.ASCII,
   fontSize: 10,
   invert: false,
+  showLabels: false,
 };

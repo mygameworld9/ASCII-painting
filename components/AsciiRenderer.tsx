@@ -1,19 +1,37 @@
 
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { AsciiSettings, AnimationMode, RenderMode } from '../types';
-import { Copy, Check } from 'lucide-react';
+import { Copy, Check, Palette, Download } from 'lucide-react';
 
 interface AsciiRendererProps {
   imageSrc: string;
   settings: AsciiSettings;
 }
 
+interface PaletteItem {
+  id: number;
+  color: string;
+  count: number;
+  r: number;
+  g: number;
+  b: number;
+  a: number;
+}
+
 export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const animationRef = useRef<number>(0);
+  
+  // Refs for data storage to avoid re-calculation in render loop
+  const pixelDataRef = useRef<Uint8ClampedArray | null>(null);
+  const colorIdMapRef = useRef<Map<string, number>>(new Map());
+  const paletteRef = useRef<PaletteItem[]>([]);
+  const dimensionsRef = useRef({ cols: 0, rows: 0, charW: 0, charH: 0 });
+
   const [sourceImage, setSourceImage] = useState<HTMLImageElement | null>(null);
   const [isCopied, setIsCopied] = useState(false);
+  const [paletteState, setPaletteState] = useState<PaletteItem[]>([]);
 
   // Load image
   useEffect(() => {
@@ -28,22 +46,10 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
   const handleCopyAscii = () => {
     if (!sourceImage || settings.renderMode !== RenderMode.ASCII) return;
 
-    const cols = settings.resolution;
-    const charW = settings.fontSize * 0.6;
-    const charH = settings.fontSize;
-    const aspectRatio = sourceImage.height / sourceImage.width;
-    const rows = Math.floor(cols * aspectRatio * (charW / charH));
+    const { cols, rows, charW, charH } = dimensionsRef.current;
+    const pixels = pixelDataRef.current;
 
-    const offCanvas = document.createElement('canvas');
-    offCanvas.width = cols;
-    offCanvas.height = rows;
-    const ctx = offCanvas.getContext('2d');
-    
-    if (!ctx) return;
-
-    ctx.drawImage(sourceImage, 0, 0, cols, rows);
-    const imageData = ctx.getImageData(0, 0, cols, rows);
-    const pixels = imageData.data;
+    if (!pixels || cols === 0) return;
 
     let asciiString = "";
     const chars = settings.density;
@@ -55,14 +61,18 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
         let r = pixels[pixelIndex];
         let g = pixels[pixelIndex + 1];
         let b = pixels[pixelIndex + 2];
-
-        // Apply Contrast (same as render loop)
+        
+        // Apply Contrast
         if (settings.contrast !== 1.0) {
-             const factor = (259 * (settings.contrast * 255 + 255)) / (255 * (259 - settings.contrast * 255));
-             r = factor * (r - 128) + 128;
-             g = factor * (g - 128) + 128;
-             b = factor * (b - 128) + 128;
+             r = (r - 128) * settings.contrast + 128;
+             g = (g - 128) * settings.contrast + 128;
+             b = (b - 128) * settings.contrast + 128;
         }
+        
+        // Clamp
+        r = Math.max(0, Math.min(255, r));
+        g = Math.max(0, Math.min(255, g));
+        b = Math.max(0, Math.min(255, b));
 
         let brightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
         if (settings.invert) brightness = 1.0 - brightness;
@@ -79,7 +89,133 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
     });
   };
 
-  // Rendering Loop
+  const handleDownloadImage = () => {
+    if (!canvasRef.current) return;
+    const link = document.createElement('a');
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const modeName = settings.renderMode.toLowerCase();
+    link.download = `art-${modeName}-${timestamp}.png`;
+    link.href = canvasRef.current.toDataURL('image/png');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Helper to quantize color for bead palette
+  // Reduced step from 8 to 4 for smoother gradients/more accurate colors
+  const quantizeVal = (v: number) => Math.min(255, Math.round(v / 4) * 4);
+
+  // 1. PROCESS IMAGE DATA & CALCULATE DIMENSIONS
+  // This runs only when Source, Resolution, or RenderMode (dimensions logic) changes.
+  useEffect(() => {
+      if (!sourceImage) return;
+
+      const cols = settings.resolution;
+      const isAscii = settings.renderMode === RenderMode.ASCII;
+      
+      const charW = isAscii ? settings.fontSize * 0.6 : settings.fontSize;
+      const charH = settings.fontSize;
+      
+      const aspectRatio = sourceImage.height / sourceImage.width;
+      const gridRatio = isAscii ? (charW / charH) : 1.0;
+      const rows = Math.floor(cols * aspectRatio * gridRatio);
+
+      // Store dimensions
+      dimensionsRef.current = { cols, rows, charW, charH };
+
+      // Extract Pixels
+      const offCanvas = document.createElement('canvas');
+      offCanvas.width = cols;
+      offCanvas.height = rows;
+      const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
+      
+      if (offCtx) {
+        offCtx.imageSmoothingEnabled = true;
+        // HIGH QUALITY SMOOTHING for better downsampling
+        offCtx.imageSmoothingQuality = 'high'; 
+        offCtx.drawImage(sourceImage, 0, 0, cols, rows);
+        const imageData = offCtx.getImageData(0, 0, cols, rows);
+        pixelDataRef.current = imageData.data;
+      }
+
+  }, [sourceImage, settings.resolution, settings.renderMode, settings.fontSize]);
+
+
+  // 2. CALCULATE PALETTE (Bead Mode Only)
+  // This runs when Pixel Data, Contrast, Invert, or RenderMode changes.
+  useEffect(() => {
+      const pixels = pixelDataRef.current;
+      if (!pixels || settings.renderMode !== RenderMode.BEAD) {
+          setPaletteState([]);
+          paletteRef.current = [];
+          colorIdMapRef.current.clear();
+          return;
+      }
+
+      const { cols, rows } = dimensionsRef.current;
+      const tempFreq = new Map<string, {count: number, r: number, g: number, b: number, a: number}>();
+
+      // Static palette calculation (ignoring animation distortion for stability)
+      for (let i = 0; i < cols * rows; i++) {
+          const pIdx = i * 4;
+          let r = pixels[pIdx], g = pixels[pIdx+1], b = pixels[pIdx+2], a = pixels[pIdx+3];
+
+          // Filter transparency
+          if (a < 10) continue;
+
+          // Apply Contrast (Corrected Algorithm)
+          if (settings.contrast !== 1.0) {
+            r = (r - 128) * settings.contrast + 128;
+            g = (g - 128) * settings.contrast + 128;
+            b = (b - 128) * settings.contrast + 128;
+          }
+          
+          // Clamp
+          r = Math.max(0, Math.min(255, r));
+          g = Math.max(0, Math.min(255, g));
+          b = Math.max(0, Math.min(255, b));
+          
+          if (settings.invert) { r=255-r; g=255-g; b=255-b; }
+
+          const qr = quantizeVal(r);
+          const qg = quantizeVal(g);
+          const qb = quantizeVal(b);
+          const qa = quantizeVal(a);
+
+          const key = `${qr},${qg},${qb},${qa}`;
+          
+          const existing = tempFreq.get(key);
+          if (existing) {
+              existing.count++;
+          } else {
+              tempFreq.set(key, { count: 1, r: qr, g: qg, b: qb, a: qa });
+          }
+      }
+
+      const sortedEntries = Array.from(tempFreq.entries()).sort((a, b) => b[1].count - a[1].count);
+      const newPalette: PaletteItem[] = [];
+      const newColorMap = new Map<string, number>();
+
+      sortedEntries.forEach((entry, index) => {
+          const id = index + 1;
+          newColorMap.set(entry[0], id);
+          newPalette.push({
+              id,
+              color: `rgba(${entry[1].r},${entry[1].g},${entry[1].b},${entry[1].a/255})`,
+              count: entry[1].count,
+              r: entry[1].r, g: entry[1].g, b: entry[1].b, a: entry[1].a
+          });
+      });
+
+      colorIdMapRef.current = newColorMap;
+      paletteRef.current = newPalette;
+      setPaletteState(newPalette);
+
+  }, [settings.resolution, settings.contrast, settings.invert, settings.renderMode, pixelDataRef.current]); 
+
+
+  // 3. RENDER LOOP
+  // Runs on animation frame. Uses Refs for data.
   useEffect(() => {
     if (!sourceImage || !canvasRef.current || !containerRef.current) return;
 
@@ -87,134 +223,26 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
     const ctx = canvas.getContext('2d', { alpha: false }); 
     if (!ctx) return;
 
-    const offCanvas = document.createElement('canvas');
-    const offCtx = offCanvas.getContext('2d', { willReadFrequently: true }); 
-    
-    if (!offCtx) return;
-
     let startTime = Date.now();
     
     const renderFrame = () => {
-      const now = Date.now();
-      const elapsed = (now - startTime) * 0.001 * settings.animationSpeed;
-      
-      const isAscii = settings.renderMode === RenderMode.ASCII;
-      const isBead = settings.renderMode === RenderMode.BEAD;
-      const isPixel = settings.renderMode === RenderMode.PIXEL;
-      const isHD = settings.renderMode === RenderMode.HD;
-
-      // --- HD RENDER PATH ---
-      if (isHD) {
-          const container = containerRef.current;
-          if (!container) return;
-          
-          // Fill container maintaining aspect ratio
-          const maxWidth = container.clientWidth;
-          const maxHeight = container.clientHeight;
-          const imgAspect = sourceImage.width / sourceImage.height;
-          const containerAspect = maxWidth / maxHeight;
-
-          let drawW, drawH;
-          if (containerAspect > imgAspect) {
-              drawH = maxHeight;
-              drawW = maxHeight * imgAspect;
-          } else {
-              drawW = maxWidth;
-              drawH = maxWidth / imgAspect;
-          }
-
-          if (canvas.width !== drawW || canvas.height !== drawH) {
-              canvas.width = drawW;
-              canvas.height = drawH;
-          }
-
-          // Fill Background
-          ctx.fillStyle = settings.backgroundColor;
-          ctx.fillRect(0, 0, drawW, drawH);
-
-          // Filter for contrast/invert
-          const contrastVal = settings.contrast * 100;
-          const invertVal = settings.invert ? 100 : 0;
-          ctx.filter = `contrast(${contrastVal}%) invert(${invertVal}%)`;
-
-          // Animation Logic for HD
-          if (settings.animationMode === AnimationMode.WAVE) {
-              const amplitude = 10;
-              const frequency = 0.02;
-              const speed = 5;
-              
-              // Draw horizontal strips with offset
-              // We cannot do per-pixel in HD fast enough, so we slice
-              for (let y = 0; y < drawH; y++) {
-                  const offset = Math.sin(y * frequency + elapsed * speed) * amplitude;
-                  
-                  // Map dest y to source y
-                  const sy = (y / drawH) * sourceImage.height;
-                  const sH = sourceImage.height / drawH;
-
-                  ctx.drawImage(
-                      sourceImage, 
-                      0, sy, sourceImage.width, sH, // source
-                      offset, y, drawW, 1 // dest
-                  );
-              }
-          } else if (settings.animationMode === AnimationMode.JELLY) {
-               const bounceX = Math.sin(elapsed * 3) * 0.02;
-               const bounceY = Math.cos(elapsed * 2) * 0.02;
-               const rot = Math.sin(elapsed) * 0.02;
-
-               ctx.save();
-               ctx.translate(drawW/2, drawH/2);
-               ctx.scale(1 + bounceX, 1 + bounceY);
-               ctx.rotate(rot);
-               ctx.drawImage(sourceImage, -drawW/2, -drawH/2, drawW, drawH);
-               ctx.restore();
-
-          } else if (settings.animationMode === AnimationMode.SCANLINE) {
-               ctx.drawImage(sourceImage, 0, 0, drawW, drawH);
-               
-               // Overlay scanline
-               const scanY = (elapsed * 200) % drawH;
-               ctx.filter = 'none'; // Don't apply contrast to the scanline overlay itself? Actually we want clear overlay
-               ctx.fillStyle = 'rgba(255,255,255,0.1)';
-               ctx.fillRect(0, scanY, drawW, 10);
-
-               // Random glitch
-               if (Math.random() > 0.97) {
-                   const h = Math.random() * 50;
-                   const y = Math.random() * drawH;
-                   const xOff = (Math.random() - 0.5) * 20;
-                   ctx.drawImage(canvas, 0, y, drawW, h, xOff, y, drawW, h);
-               }
-
-          } else {
-               // Static / Matrix fallback
-               ctx.drawImage(sourceImage, 0, 0, drawW, drawH);
-          }
-          
-          ctx.filter = 'none';
+      const pixels = pixelDataRef.current;
+      if (!pixels) {
           animationRef.current = requestAnimationFrame(renderFrame);
           return;
       }
 
-      // --- GRID RENDER PATH (ASCII, BEAD, PIXEL) ---
+      const now = Date.now();
+      const elapsed = (now - startTime) * 0.001 * settings.animationSpeed;
+      const intensity = settings.animationIntensity;
       
-      // Determine dimensions
-      const cols = settings.resolution;
+      const { cols, rows, charW, charH } = dimensionsRef.current;
       
-      // Beads and Pixels are square (using fontSize as side length)
-      // ASCII is rectangular (fontSize * 0.6 width)
-      const charW = isAscii ? settings.fontSize * 0.6 : settings.fontSize;
-      const charH = settings.fontSize;
-      
-      const aspectRatio = sourceImage.height / sourceImage.width;
-      
-      // Adjust grid ratio. ASCII needs (charW/charH) to maintain image aspect ratio.
-      // Bead/Pixel use 1.0 square ratio.
-      const gridRatio = isAscii ? (charW / charH) : 1.0;
-      const rows = Math.floor(cols * aspectRatio * gridRatio); 
+      const isAscii = settings.renderMode === RenderMode.ASCII;
+      const isBead = settings.renderMode === RenderMode.BEAD;
+      const isPixel = settings.renderMode === RenderMode.PIXEL;
+      const isMinecraft = settings.renderMode === RenderMode.MINECRAFT;
 
-      // Canvas size (Display)
       const targetWidth = cols * charW;
       const targetHeight = rows * charH;
 
@@ -223,48 +251,45 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
         canvas.height = targetHeight;
       }
 
-      // Resize source image to our grid size (cols x rows)
-      offCanvas.width = cols;
-      offCanvas.height = rows;
-      offCtx.clearRect(0, 0, cols, rows);
-      offCtx.drawImage(sourceImage, 0, 0, cols, rows);
-      
-      const imageData = offCtx.getImageData(0, 0, cols, rows);
-      const pixels = imageData.data;
-
       // Fill Background
       ctx.fillStyle = settings.backgroundColor;
       ctx.fillRect(0, 0, targetWidth, targetHeight);
 
-      // Setup for ASCII
       if (isAscii) {
           ctx.font = `bold ${settings.fontSize}px "JetBrains Mono", monospace`;
           ctx.textBaseline = 'top';
       }
+
+      if (isBead && settings.showLabels) {
+          const labelSize = Math.max(8, settings.fontSize * 0.5);
+          ctx.font = `${labelSize}px "Inter", sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+      }
       
       const chars = settings.density;
       const charLen = chars.length;
+      const colorMap = colorIdMapRef.current;
 
-      // Loop grid
       for (let y = 0; y < rows; y++) {
         for (let x = 0; x < cols; x++) {
           
-          // Animation Math
           let sampleX = x;
           let sampleY = y;
 
           if (settings.animationMode === AnimationMode.WAVE) {
-            const wave = Math.sin(x * 0.1 + elapsed * 2) * 2;
+            const wave = Math.sin(x * 0.1 + elapsed * 2) * (2 * intensity);
             sampleY = Math.floor(y + wave);
           } else if (settings.animationMode === AnimationMode.JELLY) {
-             const waveX = Math.sin(y * 0.1 + elapsed) * 1.5;
-             const waveY = Math.cos(x * 0.1 + elapsed) * 1.5;
+             const waveX = Math.sin(y * 0.1 + elapsed) * (1.5 * intensity);
+             const waveY = Math.cos(x * 0.1 + elapsed) * (1.5 * intensity);
              sampleX = Math.floor(x + waveX);
              sampleY = Math.floor(y + waveY);
           } else if (settings.animationMode === AnimationMode.SCANLINE) {
              const scan = Math.floor((elapsed * 10) % rows);
-             if (Math.abs(y - scan) < 2) {
-               sampleX = Math.floor(x + (Math.random() - 0.5) * 2);
+             const width = 2 * Math.max(0.5, intensity);
+             if (Math.abs(y - scan) < width) {
+               sampleX = Math.floor(x + (Math.random() - 0.5) * (2 * intensity));
              }
           }
 
@@ -272,19 +297,25 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
           sampleY = Math.max(0, Math.min(rows - 1, sampleY));
 
           const pixelIndex = (sampleY * cols + sampleX) * 4;
+          
+          // Fast pixel read
           let r = pixels[pixelIndex];
           let g = pixels[pixelIndex + 1];
           let b = pixels[pixelIndex + 2];
+          let a = pixels[pixelIndex + 3];
           
-          // Contrast adjustment
+          // Corrected Contrast Algorithm (Standard linear multiplier)
           if (settings.contrast !== 1.0) {
-             const factor = (259 * (settings.contrast * 255 + 255)) / (255 * (259 - settings.contrast * 255));
-             r = factor * (r - 128) + 128;
-             g = factor * (g - 128) + 128;
-             b = factor * (b - 128) + 128;
+             r = (r - 128) * settings.contrast + 128;
+             g = (g - 128) * settings.contrast + 128;
+             b = (b - 128) * settings.contrast + 128;
           }
 
-          // Invert Colors for Bead/Pixel Mode if needed
+          // Clamp
+          r = r < 0 ? 0 : (r > 255 ? 255 : r);
+          g = g < 0 ? 0 : (g > 255 ? 255 : g);
+          b = b < 0 ? 0 : (b > 255 ? 255 : b);
+
           if (settings.invert && !isAscii) {
              r = 255 - r;
              g = 255 - g;
@@ -292,38 +323,74 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
           }
 
           if (isBead) {
-              // Bead Rendering
+              // Quantize for bead color consistency, but use finer step (4) for gradients
+              const qr = Math.min(255, Math.round(r / 4) * 4);
+              const qg = Math.min(255, Math.round(g / 4) * 4);
+              const qb = Math.min(255, Math.round(b / 4) * 4);
+              const qa = Math.min(255, Math.round(a / 4) * 4);
+              
+              if (qa < 10) continue;
+
               const cx = x * charW + charW / 2;
               const cy = y * charH + charH / 2;
               const radius = (charW / 2) * 0.85; 
               
-              ctx.fillStyle = `rgb(${r},${g},${b})`;
+              ctx.fillStyle = `rgba(${qr},${qg},${qb},${qa/255})`;
               ctx.beginPath();
               ctx.arc(cx, cy, radius, 0, Math.PI * 2);
               ctx.fill();
 
+              if (settings.showLabels) {
+                  const key = `${qr},${qg},${qb},${qa}`;
+                  const id = colorMap.get(key);
+                  if (id !== undefined) {
+                      const brightness = (qr * 299 + qg * 587 + qb * 114) / 1000;
+                      ctx.fillStyle = brightness > 128 ? '#000000' : '#ffffff';
+                      ctx.fillText(id.toString(), cx, cy);
+                  }
+              }
+
           } else if (isPixel) {
-              // Pixel Rendering
-              ctx.fillStyle = `rgb(${r},${g},${b})`;
-              // +0.5 to prevent sub-pixel rendering gaps
+              if (a < 5) continue;
+              ctx.fillStyle = `rgba(${r},${g},${b},${a/255})`;
               ctx.fillRect(x * charW, y * charH, charW + 0.5, charH + 0.5);
 
+          } else if (isMinecraft) {
+              if (a < 20) continue;
+              const cx = x * charW;
+              const cy = y * charH;
+              
+              ctx.fillStyle = `rgba(${r},${g},${b},${a/255})`;
+              ctx.fillRect(cx, cy, charW + 0.5, charH + 0.5);
+
+              if (a > 200) {
+                  const bevel = Math.max(1, Math.floor(charW * 0.12));
+                  ctx.fillStyle = 'rgba(255,255,255,0.2)';
+                  ctx.fillRect(cx, cy, charW, bevel);
+                  ctx.fillRect(cx, cy, bevel, charH);
+                  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                  ctx.fillRect(cx, cy + charH - bevel, charW, bevel);
+                  ctx.fillRect(cx + charW - bevel, cy, bevel, charH);
+              }
+
           } else {
-              // ASCII Rendering
+              // ASCII
               let brightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
               if (settings.invert) brightness = 1.0 - brightness;
 
               const charIndex = Math.floor(Math.max(0, Math.min(1, brightness)) * (charLen - 1));
               let char = chars[charIndex];
+              let alpha = a / 255;
 
               if (settings.animationMode === AnimationMode.MATRIX) {
-                const flicker = Math.random() > 0.9 ? 0.5 : 1;
-                ctx.globalAlpha = Math.max(0, Math.min(1, brightness * flicker));
+                const flickerThreshold = 1.0 - (0.1 * intensity);
+                const flicker = Math.random() > Math.max(0.5, flickerThreshold) ? 0.5 : 1;
+                ctx.globalAlpha = Math.max(0, Math.min(1, brightness * flicker * alpha));
                 if (Math.random() > 0.95) {
                    char = chars[Math.floor(Math.random() * charLen)];
                 }
               } else {
-                ctx.globalAlpha = 1;
+                ctx.globalAlpha = alpha;
               }
 
               if (settings.animationMode === AnimationMode.SCANLINE) {
@@ -334,6 +401,7 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
               }
 
               ctx.fillText(char, x * charW, y * charH);
+              ctx.globalAlpha = 1.0; 
           }
         }
       }
@@ -346,7 +414,12 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
     return () => {
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
     };
-  }, [sourceImage, settings]);
+  }, [sourceImage, settings]); 
+
+  // Convert RGB to Hex for Palette Display
+  const rgbToHex = (r: number, g: number, b: number) => {
+    return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
+  };
 
   return (
     <div 
@@ -359,18 +432,59 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
       <canvas 
         ref={canvasRef} 
         className="max-w-full max-h-full object-contain"
-        style={{ imageRendering: settings.renderMode === RenderMode.HD ? 'auto' : 'pixelated' }}
+        style={{ imageRendering: 'pixelated' }}
       />
 
-      {sourceImage && settings.renderMode === RenderMode.ASCII && (
-        <button
-          onClick={handleCopyAscii}
-          className="absolute top-4 right-4 bg-zinc-900/80 backdrop-blur border border-zinc-700 text-zinc-200 px-3 py-2 rounded-lg flex items-center gap-2 text-xs font-medium hover:bg-indigo-600 hover:border-indigo-500 transition-all shadow-xl opacity-0 group-hover:opacity-100 focus:opacity-100"
-          title="Copy text to clipboard"
-        >
-          {isCopied ? <Check size={14} /> : <Copy size={14} />}
-          {isCopied ? 'Copied!' : 'Copy Text'}
-        </button>
+      {/* Action Buttons */}
+      <div className="absolute top-4 right-4 flex items-center gap-2 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+         {sourceImage && (
+            <button
+              onClick={handleDownloadImage}
+              className="bg-zinc-900/80 backdrop-blur border border-zinc-700 text-zinc-200 px-3 py-2 rounded-lg flex items-center gap-2 text-xs font-medium hover:bg-indigo-600 hover:border-indigo-500 transition-all shadow-xl"
+              title="Download Image"
+            >
+              <Download size={14} />
+              Save Image
+            </button>
+         )}
+
+         {sourceImage && settings.renderMode === RenderMode.ASCII && (
+            <button
+              onClick={handleCopyAscii}
+              className="bg-zinc-900/80 backdrop-blur border border-zinc-700 text-zinc-200 px-3 py-2 rounded-lg flex items-center gap-2 text-xs font-medium hover:bg-indigo-600 hover:border-indigo-500 transition-all shadow-xl"
+              title="Copy text to clipboard"
+            >
+              {isCopied ? <Check size={14} /> : <Copy size={14} />}
+              {isCopied ? 'Copied!' : 'Copy Text'}
+            </button>
+         )}
+      </div>
+
+      {/* Bead Palette Legend Overlay */}
+      {sourceImage && settings.renderMode === RenderMode.BEAD && settings.showLabels && paletteState.length > 0 && (
+          <div className="absolute right-4 top-16 bottom-4 w-48 bg-zinc-900/90 backdrop-blur-md border border-zinc-700 rounded-xl shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-right duration-300 z-10">
+              <div className="p-3 border-b border-zinc-700 flex items-center gap-2 bg-zinc-900">
+                  <Palette size={14} className="text-indigo-400"/>
+                  <h3 className="text-xs font-bold text-zinc-200">Color Palette</h3>
+                  <span className="text-[10px] ml-auto text-zinc-500">{paletteState.length} colors</span>
+              </div>
+              <div className="overflow-y-auto flex-1 p-2 space-y-1 custom-scrollbar">
+                  {paletteState.map((p) => (
+                      <div key={p.id} className="flex items-center gap-2 p-1.5 rounded hover:bg-zinc-800/50 transition-colors">
+                          <span className="text-[10px] font-mono font-bold w-4 text-zinc-400 text-right">{p.id}.</span>
+                          <div 
+                            className="w-6 h-6 rounded-full border border-zinc-600 shadow-sm flex items-center justify-center" 
+                            style={{backgroundColor: p.color}}
+                          >
+                          </div>
+                          <div className="flex flex-col">
+                              <span className="text-[10px] font-mono text-zinc-300">{rgbToHex(p.r, p.g, p.b)}</span>
+                              <span className="text-[9px] text-zinc-600">{p.count} beads</span>
+                          </div>
+                      </div>
+                  ))}
+              </div>
+          </div>
       )}
     </div>
   );
