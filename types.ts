@@ -2,10 +2,6 @@
 
 export enum AnimationMode {
   STATIC = 'STATIC',
-  WAVE = 'WAVE',
-  JELLY = 'JELLY',
-  MATRIX = 'MATRIX',
-  SCANLINE = 'SCANLINE',
   PARTICLES = 'PARTICLES'
 }
 

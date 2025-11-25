@@ -3,7 +3,7 @@
 import React from 'react';
 import { AsciiSettings, AnimationMode, RenderMode } from '../types';
 import { DENSITY_SETS } from '../constants';
-import { Settings2, Play, Zap, Monitor, Waves, Grid, Type, LayoutGrid, Tag, Box, RotateCcw, RotateCw, Sparkles, ScanFace } from 'lucide-react';
+import { Settings2, Monitor, Grid, Type, LayoutGrid, Tag, Box, RotateCcw, RotateCw, Sparkles, ScanFace } from 'lucide-react';
 
 interface ControlsProps {
   settings: AsciiSettings;
@@ -144,10 +144,6 @@ export const Controls: React.FC<ControlsProps> = ({
         <div className="grid grid-cols-2 gap-2">
           {[
             { mode: AnimationMode.STATIC, icon: <Monitor size={14}/>, label: 'Static' },
-            { mode: AnimationMode.WAVE, icon: <Waves size={14}/>, label: 'Wave' },
-            { mode: AnimationMode.JELLY, icon: <Zap size={14}/>, label: 'Jelly' },
-            { mode: AnimationMode.MATRIX, icon: <Play size={14}/>, label: 'Matrix' },
-            { mode: AnimationMode.SCANLINE, icon: <Monitor size={14}/>, label: 'Glitch' },
             { mode: AnimationMode.PARTICLES, icon: <Sparkles size={14}/>, label: 'Particles' },
           ].map((item) => (
             <button

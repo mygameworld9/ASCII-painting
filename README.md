@@ -21,10 +21,7 @@ A powerful, interactive web application that transforms images into dynamic, ani
   - **Pixel Art**: Clear, grid-based pixel rendering.
   - **Minecraft**: Voxel-style block rendering with 3D beveled edges.
 - **Dynamic Animations**:
-  - **Matrix**: Digital rain effects with flickering characters.
-  - **Wave**: Sine-wave distortion animations.
-  - **Jelly**: Wobbling elasticity effects.
-  - **Scanline/Glitch**: Retro CRT monitor vibes.
+  - **Particles**: Dynamic particle effects based on image contours.
 - **Full Customization**: Control resolution, font/cell size, contrast, density/character sets, and colors.
 - **Export**: Copy the generated ASCII text directly to your clipboard (ASCII mode only).
 
@@ -55,7 +52,7 @@ To use the AI generation features, you need a **Google Gemini API Key**.
 1.  **Upload or Generate**: Drag and drop an image file, or type a prompt.
 2.  **Choose Style**: Switch between **ASCII**, **Bead**, **Pixel**, and **Minecraft** modes in the sidebar.
 3.  **Configure**: Adjust the resolution to control the level of detail.
-4.  **Animate**: Select a mode like "Wave" or "Jelly" to distort the image in real-time.
+4.  **Animate**: Toggle "Particles" mode to see dynamic effects.
 
 ---
 
@@ -85,10 +82,7 @@ To use the AI generation features, you need a **Google Gemini API Key**.
   - **像素画 (Pixel Art)**：清晰的网格化像素渲染。
   - **Minecraft**：具有 3D 倒角边缘的体素方块风格渲染。
 - **动态动画**：
-  - **黑客帝国 (Matrix)**：具有闪烁字符的数字雨效果。
-  - **波浪 (Wave)**：正弦波扭曲动画。
-  - **果冻 (Jelly)**：摆动弹性效果。
-  - **扫描线/故障 (Scanline)**：复古 CRT 显示器风格。
+  - **粒子效果 (Particles)**：基于图像轮廓的动态粒子特效。
 - **全面定制**：控制分辨率、单元格大小、对比度、字符集密度和颜色。
 - **导出**：将生成的 ASCII 文本直接复制到剪贴板（仅限 ASCII 模式）。
 
@@ -119,4 +113,4 @@ To use the AI generation features, you need a **Google Gemini API Key**.
 1.  **上传或生成**：上传图片或输入提示词生成。
 2.  **选择风格**：在侧边栏中切换 **ASCII**、**Bead (拼豆)**、**Pixel (像素)** 或 **Minecraft** 模式。
 3.  **配置**：调整分辨率以控制细节水平。
-4.  **动画**：选择“Wave”或“Jelly”等模式，实时扭曲和动画化图像。
+4.  **动画**：切换到“Particles”模式以查看动态效果。
