@@ -1,9 +1,8 @@
-
-
 import React from 'react';
 import { AsciiSettings, AnimationMode, RenderMode } from '../types';
 import { DENSITY_SETS } from '../constants';
-import { Settings2, Monitor, Grid, Type, LayoutGrid, Tag, Box, RotateCcw, RotateCw, Sparkles, ScanFace } from 'lucide-react';
+import { Settings2, Monitor, Grid, Type, LayoutGrid, Tag, Box, RotateCcw, RotateCw, Sparkles, ScanFace, Wand2, User, Zap, Code, Play } from 'lucide-react';
+import { tuneParticleSettings, generateMotionScript } from '../services/geminiService';
 
 interface ControlsProps {
   settings: AsciiSettings;
@@ -15,6 +14,27 @@ interface ControlsProps {
   canRedo: boolean;
 }
 
+const AI_PRESETS = [
+  { 
+    id: 'isolate', 
+    label: 'Isolate Subject', 
+    icon: <ScanFace size={12}/>, 
+    prompt: 'Strictly isolate the subject. Set extractionThreshold HIGH (65-80) to completely remove the background. Moderate speed.' 
+  },
+  { 
+    id: 'restore', 
+    label: 'Restore Detail', 
+    icon: <User size={12}/>, 
+    prompt: 'Show everything. Set extractionThreshold VERY LOW (0-15) to restore full background and details. Slow speed, low intensity.' 
+  },
+  { 
+    id: 'energy', 
+    label: 'Energy Flow', 
+    icon: <Zap size={12}/>, 
+    prompt: 'High energy chaotic particle flow. Fast speed, high intensity, medium threshold.' 
+  }
+];
+
 export const Controls: React.FC<ControlsProps> = ({ 
   settings, 
   onUpdate, 
@@ -24,12 +44,51 @@ export const Controls: React.FC<ControlsProps> = ({
   canUndo,
   canRedo
 }) => {
+  const [tuningPrompt, setTuningPrompt] = React.useState("");
+  const [motionPrompt, setMotionPrompt] = React.useState("");
+  const [isTuning, setIsTuning] = React.useState(false);
+  const [isGeneratingScript, setIsGeneratingScript] = React.useState(false);
   
   const handleChange = (key: keyof AsciiSettings, value: any, shouldCommit = false) => {
     const newSettings = { ...settings, [key]: value };
     onUpdate(newSettings);
     if (shouldCommit) {
       onCommit(newSettings);
+    }
+  };
+
+  const handleAiTune = async (promptOverride?: string) => {
+    const promptToUse = promptOverride || tuningPrompt;
+    if (!promptToUse.trim()) return;
+    
+    setIsTuning(true);
+    // If using a preset, update the text box to show what's happening (optional)
+    if (promptOverride) setTuningPrompt(promptOverride);
+
+    try {
+        const newParams = await tuneParticleSettings(promptToUse);
+        const merged = { ...settings, ...newParams };
+        onUpdate(merged);
+        onCommit(merged);
+    } catch (e) {
+        console.error("Tuning failed", e);
+    } finally {
+        setIsTuning(false);
+    }
+  };
+
+  const handleGenerateScript = async () => {
+    if (!motionPrompt.trim()) return;
+    setIsGeneratingScript(true);
+    try {
+        const script = await generateMotionScript(motionPrompt);
+        if (script) {
+            handleChange('motionScript', script, true);
+        }
+    } catch(e) {
+        console.error("Script failed", e);
+    } finally {
+        setIsGeneratingScript(false);
     }
   };
 
@@ -162,6 +221,93 @@ export const Controls: React.FC<ControlsProps> = ({
         </div>
       </div>
 
+      {/* AI Particle Tuner & Motion Script */}
+      {settings.animationMode === AnimationMode.PARTICLES && (
+          <div className="animate-in slide-in-from-top-2 duration-200 space-y-4">
+            
+            {/* 1. Parameter Tuner */}
+            <div className="p-3 bg-gradient-to-br from-zinc-800 to-zinc-900 rounded-lg border border-zinc-700 shadow-inner">
+             <label className="text-xs font-semibold text-indigo-300 mb-2 flex items-center gap-1.5">
+                 <Wand2 size={12} />
+                 AI Parameter Tuner
+             </label>
+             <div className="flex gap-2 mb-2">
+                 <input
+                     type="text"
+                     value={tuningPrompt}
+                     onChange={(e) => setTuningPrompt(e.target.value)}
+                     onKeyDown={(e) => e.key === 'Enter' && handleAiTune()}
+                     placeholder="E.g. 'Calm ghostly float'"
+                     className="flex-1 bg-zinc-950/50 text-[10px] text-white p-2 rounded border border-zinc-700 focus:border-indigo-500 outline-none placeholder:text-zinc-600"
+                 />
+                 <button
+                     onClick={() => handleAiTune()}
+                     disabled={isTuning || !tuningPrompt.trim()}
+                     className="bg-indigo-600 hover:bg-indigo-500 text-white p-2 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[32px]"
+                     title="Tune Parameters"
+                 >
+                     {isTuning ? (
+                         <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                     ) : (
+                         <Sparkles size={14} />
+                     )}
+                 </button>
+             </div>
+             <div className="grid grid-cols-3 gap-1.5">
+                {AI_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    onClick={() => handleAiTune(preset.prompt)}
+                    disabled={isTuning}
+                    className="flex flex-col items-center justify-center gap-1.5 p-2 bg-zinc-800/50 hover:bg-zinc-700 border border-zinc-700/50 hover:border-indigo-500/50 rounded transition-all text-center group"
+                    title={preset.prompt}
+                  >
+                    <div className="text-indigo-400 group-hover:text-indigo-300 transition-colors">
+                      {preset.icon}
+                    </div>
+                    <span className="text-[9px] font-medium text-zinc-400 group-hover:text-white leading-tight">
+                      {preset.label}
+                    </span>
+                  </button>
+                ))}
+             </div>
+            </div>
+
+            {/* 2. Motion Script Designer */}
+            <div className="p-3 bg-zinc-900 rounded-lg border border-zinc-700">
+                <label className="text-xs font-semibold text-emerald-300 mb-2 flex items-center gap-1.5">
+                    <Code size={12} />
+                    AI Motion Designer
+                </label>
+                <div className="flex gap-2 mb-2">
+                    <input
+                        type="text"
+                        value={motionPrompt}
+                        onChange={(e) => setMotionPrompt(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleGenerateScript()}
+                        placeholder="Describe movement (e.g. 'Vortex')"
+                        className="flex-1 bg-zinc-950/50 text-[10px] text-white p-2 rounded border border-zinc-700 focus:border-emerald-500 outline-none placeholder:text-zinc-600"
+                    />
+                    <button
+                        onClick={() => handleGenerateScript()}
+                        disabled={isGeneratingScript || !motionPrompt.trim()}
+                        className="bg-emerald-600 hover:bg-emerald-500 text-white p-2 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[32px]"
+                        title="Generate Code Script"
+                    >
+                         {isGeneratingScript ? (
+                             <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                         ) : (
+                             <Play size={14} />
+                         )}
+                    </button>
+                </div>
+                <p className="text-[9px] text-zinc-500">
+                    Generates custom Javascript math for particle paths.
+                </p>
+            </div>
+          </div>
+      )}
+
       {/* Animation Controls */}
       <div className="space-y-4 border-t border-zinc-800 pt-4">
         {/* Animation Speed */}
@@ -226,7 +372,7 @@ export const Controls: React.FC<ControlsProps> = ({
                     className="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
                 />
                 <p className="text-[10px] text-zinc-500 leading-tight">
-                    Adjust to separate character from background. Higher = stricter.
+                    Higher = Only Subject (Isolate). Lower = Full Image (Restore).
                 </p>
             </div>
         )}
@@ -336,7 +482,6 @@ export const Controls: React.FC<ControlsProps> = ({
               <option value={DENSITY_SETS.COMPLEX}>High Detail</option>
               <option value={DENSITY_SETS.SIMPLE}>Simple</option>
               <option value={DENSITY_SETS.BLOCKS}>Blocks</option>
-              <option value={DENSITY_SETS.MATRIX}>Matrix Katakana</option>
             </select>
           </div>
       )}

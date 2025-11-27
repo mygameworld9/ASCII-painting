@@ -1,4 +1,5 @@
 
+
 # ASCII Motion Art
 
 <div align="right">
@@ -21,7 +22,6 @@ A powerful, interactive web application that transforms images into dynamic, ani
   - **Pixel Art**: Clear, grid-based pixel rendering.
   - **Minecraft**: Voxel-style block rendering with 3D beveled edges.
 - **Dynamic Animations**:
-  - **Matrix**: Digital rain effects with flickering characters.
   - **Wave**: Sine-wave distortion animations.
   - **Jelly**: Wobbling elasticity effects.
   - **Scanline/Glitch**: Retro CRT monitor vibes.
@@ -85,7 +85,6 @@ To use the AI generation features, you need a **Google Gemini API Key**.
   - **像素画 (Pixel Art)**：清晰的网格化像素渲染。
   - **Minecraft**：具有 3D 倒角边缘的体素方块风格渲染。
 - **动态动画**：
-  - **黑客帝国 (Matrix)**：具有闪烁字符的数字雨效果。
   - **波浪 (Wave)**：正弦波扭曲动画。
   - **果冻 (Jelly)**：摆动弹性效果。
   - **扫描线/故障 (Scanline)**：复古 CRT 显示器风格。

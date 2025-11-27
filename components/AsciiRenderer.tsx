@@ -43,17 +43,35 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
     };
   }, [imageSrc]);
 
-  const handleCopyAscii = () => {
-    if (!sourceImage || settings.renderMode !== RenderMode.ASCII) return;
+  const handleCopyText = () => {
+    if (!sourceImage) return;
+    
+    const isAscii = settings.renderMode === RenderMode.ASCII;
+    const isMinecraft = settings.renderMode === RenderMode.MINECRAFT;
 
-    const { cols, rows, charW, charH } = dimensionsRef.current;
+    if (!isAscii && !isMinecraft) return;
+
+    const { cols, rows } = dimensionsRef.current;
     const pixels = pixelDataRef.current;
 
     if (!pixels || cols === 0) return;
 
-    let asciiString = "";
+    let resultString = "";
     const chars = settings.density;
     const charLen = chars.length;
+
+    // Palette for Minecraft Emoji Copy
+    const emojiPalette = [
+        { char: '⬛', r: 0, g: 0, b: 0 },
+        { char: '⬜', r: 255, g: 255, b: 255 },
+        { char: '🟥', r: 255, g: 0, b: 0 },
+        { char: '🟦', r: 0, g: 0, b: 255 },
+        { char: '🟩', r: 0, g: 255, b: 0 },
+        { char: '🟨', r: 255, g: 255, b: 0 },
+        { char: '🟧', r: 255, g: 165, b: 0 },
+        { char: '🟪', r: 128, g: 0, b: 128 },
+        { char: '🟫', r: 165, g: 42, b: 42 },
+    ];
 
     for (let y = 0; y < rows; y++) {
       for (let x = 0; x < cols; x++) {
@@ -74,16 +92,39 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
         g = Math.max(0, Math.min(255, g));
         b = Math.max(0, Math.min(255, b));
 
-        let brightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-        if (settings.invert) brightness = 1.0 - brightness;
+        // Apply Invert logic
+        // For ASCII, we used to calc brightness then invert brightness.
+        // For Minecraft, we must invert RGB.
+        // Doing RGB invert covers both if we use RGB for brightness calc afterwards.
+        if (settings.invert) {
+             r = 255 - r;
+             g = 255 - g;
+             b = 255 - b;
+        }
 
-        const charIndex = Math.floor(Math.max(0, Math.min(1, brightness)) * (charLen - 1));
-        asciiString += chars[charIndex];
+        if (isAscii) {
+            const brightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+            const charIndex = Math.floor(Math.max(0, Math.min(1, brightness)) * (charLen - 1));
+            resultString += chars[charIndex];
+        } else if (isMinecraft) {
+            // Find closest emoji block
+            let minDist = Infinity;
+            let closest = emojiPalette[0].char;
+            
+            for (const p of emojiPalette) {
+                const d = (r - p.r) ** 2 + (g - p.g) ** 2 + (b - p.b) ** 2;
+                if (d < minDist) {
+                    minDist = d;
+                    closest = p.char;
+                }
+            }
+            resultString += closest;
+        }
       }
-      asciiString += "\n";
+      resultString += "\n";
     }
 
-    navigator.clipboard.writeText(asciiString).then(() => {
+    navigator.clipboard.writeText(resultString).then(() => {
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000);
     });
@@ -102,11 +143,9 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
   };
 
   // Helper to quantize color for bead palette
-  // Reduced step from 8 to 4 for smoother gradients/more accurate colors
   const quantizeVal = (v: number) => Math.min(255, Math.round(v / 4) * 4);
 
   // 1. PROCESS IMAGE DATA & CALCULATE DIMENSIONS
-  // This runs only when Source, Resolution, or RenderMode (dimensions logic) changes.
   useEffect(() => {
       if (!sourceImage) return;
 
@@ -141,7 +180,6 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
   }, [sourceImage, settings.resolution, settings.renderMode, settings.fontSize]);
 
   // 1.5 CALCULATE SUBJECT MAP (For Particle Mode)
-  // Pre-calculate edge/subject detection to improve render performance
   useEffect(() => {
       const pixels = pixelDataRef.current;
       const { cols, rows } = dimensionsRef.current;
@@ -151,42 +189,36 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
           return;
       }
 
-      // Only calculate if needed (though fairly cheap, keeps render loop clean)
       const map = new Uint8Array(cols * rows);
       const threshold = settings.extractionThreshold;
       
       for (let y = 0; y < rows; y++) {
           for (let x = 0; x < cols; x++) {
               const idx = (y * cols + x) * 4;
-              // Get brightness
               const lum = (pixels[idx] + pixels[idx+1] + pixels[idx+2]) / 3;
               
               let diff = 0;
               let neighbors = 0;
 
-              // Check 4 neighbors for robust edge detection
-              // Right
+              // Check 4 neighbors
               if (x < cols - 1) {
                   const nIdx = idx + 4;
                   const nLum = (pixels[nIdx] + pixels[nIdx+1] + pixels[nIdx+2]) / 3;
                   diff += Math.abs(nLum - lum);
                   neighbors++;
               }
-              // Down
               if (y < rows - 1) {
                    const nIdx = idx + cols * 4;
                    const nLum = (pixels[nIdx] + pixels[nIdx+1] + pixels[nIdx+2]) / 3;
                    diff += Math.abs(nLum - lum);
                    neighbors++;
               }
-              // Left
               if (x > 0) {
                   const nIdx = idx - 4;
                   const nLum = (pixels[nIdx] + pixels[nIdx+1] + pixels[nIdx+2]) / 3;
                   diff += Math.abs(nLum - lum);
                   neighbors++;
               }
-              // Up
               if (y > 0) {
                   const nIdx = idx - cols * 4;
                   const nLum = (pixels[nIdx] + pixels[nIdx+1] + pixels[nIdx+2]) / 3;
@@ -195,8 +227,6 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
               }
               
               const avgDiff = neighbors > 0 ? diff / neighbors : 0;
-              
-              // If difference is high enough, it's an edge/subject detail
               map[y * cols + x] = avgDiff > threshold ? 1 : 0;
           }
       }
@@ -206,7 +236,6 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
 
 
   // 2. CALCULATE PALETTE (Bead Mode Only)
-  // This runs when Pixel Data, Contrast, Invert, or RenderMode changes.
   useEffect(() => {
       const pixels = pixelDataRef.current;
       if (!pixels || settings.renderMode !== RenderMode.BEAD) {
@@ -219,22 +248,18 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
       const { cols, rows } = dimensionsRef.current;
       const tempFreq = new Map<string, {count: number, r: number, g: number, b: number, a: number}>();
 
-      // Static palette calculation (ignoring animation distortion for stability)
       for (let i = 0; i < cols * rows; i++) {
           const pIdx = i * 4;
           let r = pixels[pIdx], g = pixels[pIdx+1], b = pixels[pIdx+2], a = pixels[pIdx+3];
 
-          // Filter transparency
           if (a < 10) continue;
 
-          // Apply Contrast (Corrected Algorithm)
           if (settings.contrast !== 1.0) {
             r = (r - 128) * settings.contrast + 128;
             g = (g - 128) * settings.contrast + 128;
             b = (b - 128) * settings.contrast + 128;
           }
           
-          // Clamp
           r = Math.max(0, Math.min(255, r));
           g = Math.max(0, Math.min(255, g));
           b = Math.max(0, Math.min(255, b));
@@ -277,9 +302,20 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
 
   }, [settings.resolution, settings.contrast, settings.invert, settings.renderMode, pixelDataRef.current]); 
 
+  // COMPILE MOTION SCRIPT
+  const motionFn = useMemo(() => {
+    if (settings.animationMode !== AnimationMode.PARTICLES) return null;
+    try {
+      // Create a function from the string. Safety: This is client-side evaluation of user string.
+      // x, y, t, i (intensity), w (width), h (height)
+      return new Function('x', 'y', 't', 'i', 'w', 'h', settings.motionScript || 'return [0,0];');
+    } catch (e) {
+      console.warn("Invalid motion script", e);
+      return () => [0,0];
+    }
+  }, [settings.motionScript, settings.animationMode]);
 
   // 3. RENDER LOOP
-  // Runs on animation frame. Uses Refs for data.
   useEffect(() => {
     if (!sourceImage || !canvasRef.current || !containerRef.current) return;
 
@@ -354,14 +390,19 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
               }
 
               if (!isSubject) {
-                  // Completely skip background pixels for "Extracted" look
-                  continue; 
-              } else {
-                 // Particle Float Effect for Subject
-                 const phase = (x * 0.05) + (y * 0.05);
-                 // Drift upwards slowly + breathe
-                 particleOffsetX = Math.sin(elapsed + phase) * (intensity * 2);
-                 particleOffsetY = (Math.cos(elapsed * 1.2 + phase) * (intensity * 2)) - ((elapsed * 5) % 4);
+                  continue; // Skip background
+              } else if (motionFn) {
+                 // Dynamic Motion Script
+                 try {
+                     // @ts-ignore
+                     const [dx, dy] = motionFn(x, y, elapsed, intensity, cols, rows);
+                     particleOffsetX = dx;
+                     particleOffsetY = dy;
+                 } catch (e) {
+                     // Fallback in case of runtime error in script
+                     particleOffsetX = 0;
+                     particleOffsetY = 0;
+                 }
               }
           }
 
@@ -376,7 +417,7 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
           let b = pixels[pixelIndex + 2];
           let a = pixels[pixelIndex + 3];
 
-          // Corrected Contrast Algorithm (Standard linear multiplier)
+          // Corrected Contrast
           if (settings.contrast !== 1.0) {
              r = (r - 128) * settings.contrast + 128;
              g = (g - 128) * settings.contrast + 128;
@@ -394,7 +435,6 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
              b = 255 - b;
           }
           
-          // Apply particle offsets to draw position
           const drawX = x * charW + particleOffsetX;
           const drawY = y * charH + particleOffsetY;
 
@@ -472,9 +512,9 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
     return () => {
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
     };
-  }, [sourceImage, settings]); 
+  }, [sourceImage, settings, motionFn]); 
 
-  // Convert RGB to Hex for Palette Display
+  // ... (rest of the file remains similar for hex conversion etc)
   const rgbToHex = (r: number, g: number, b: number) => {
     return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
   };
@@ -506,9 +546,9 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
             </button>
          )}
 
-         {sourceImage && settings.renderMode === RenderMode.ASCII && (
+         {sourceImage && (settings.renderMode === RenderMode.ASCII || settings.renderMode === RenderMode.MINECRAFT) && (
             <button
-              onClick={handleCopyAscii}
+              onClick={handleCopyText}
               className="bg-zinc-900/80 backdrop-blur border border-zinc-700 text-zinc-200 px-3 py-2 rounded-lg flex items-center gap-2 text-xs font-medium hover:bg-indigo-600 hover:border-indigo-500 transition-all shadow-xl"
               title="Copy text to clipboard"
             >

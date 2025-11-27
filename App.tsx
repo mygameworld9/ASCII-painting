@@ -37,14 +37,17 @@ const App: React.FC = () => {
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files && files.length > 0) {
-      const newItems: GalleryItem[] = Array.from(files).map((file: File) => ({
-        id: Math.random().toString(36).substring(2, 9) + Date.now().toString(36),
+      const timestamp = Date.now();
+      const newItems: GalleryItem[] = Array.from(files).map((file: File, index) => ({
+        // Ensure unique ID by combining timestamp, index and random string
+        id: `img-${timestamp}-${index}-${Math.random().toString(36).substring(2, 9)}`,
         url: URL.createObjectURL(file),
         name: file.name
       }));
       
       setGallery(prev => [...prev, ...newItems]);
-      // If no active image, select the first new one
+      // If no active image, select the first new one. 
+      // If there is an active image, we let the user stay on it (or we could switch to the last uploaded).
       if (!activeId && newItems.length > 0) {
         setActiveId(newItems[0].id);
       }
@@ -69,11 +72,12 @@ const App: React.FC = () => {
     setIsDragging(false);
     const files = e.dataTransfer.files;
     if (files && files.length > 0) {
+       const timestamp = Date.now();
        const newItems: GalleryItem[] = [];
-       Array.from(files).forEach((file: File) => {
+       Array.from(files).forEach((file: File, index) => {
          if (file.type.startsWith('image/')) {
              newItems.push({
-               id: Math.random().toString(36).substring(2, 9) + Date.now().toString(36),
+               id: `drop-${timestamp}-${index}-${Math.random().toString(36).substring(2, 9)}`,
                url: URL.createObjectURL(file),
                name: file.name
              });
@@ -94,7 +98,7 @@ const App: React.FC = () => {
     try {
       const base64Image = await generateAIImage(promptInput);
       const newItem: GalleryItem = {
-          id: Math.random().toString(36).substring(2, 9) + Date.now().toString(36),
+          id: `ai-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
           url: base64Image,
           name: `AI-${promptInput.slice(0, 10)}.jpg`
       };
@@ -127,14 +131,18 @@ const App: React.FC = () => {
 
   const removeImage = (e: React.MouseEvent, idToRemove: string) => {
       e.stopPropagation();
-      setGallery(prev => {
-          const newGallery = prev.filter(item => item.id !== idToRemove);
-          // If we removed the active image, switch to the previous one or null
-          if (activeId === idToRemove) {
-              setActiveId(newGallery.length > 0 ? newGallery[newGallery.length - 1].id : null);
-          }
-          return newGallery;
-      });
+      
+      // Correct way to update state that depends on another state:
+      // 1. Calculate the new gallery
+      const newGallery = gallery.filter(item => item.id !== idToRemove);
+      
+      // 2. Set the gallery
+      setGallery(newGallery);
+      
+      // 3. If we removed the active image, update activeId based on the NEW gallery
+      if (activeId === idToRemove) {
+          setActiveId(newGallery.length > 0 ? newGallery[newGallery.length - 1].id : null);
+      }
   };
 
   // Settings Management

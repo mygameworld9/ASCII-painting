@@ -26,6 +26,7 @@ export interface AsciiSettings {
   invert: boolean;
   showLabels: boolean;
   extractionThreshold: number; // 0 to 100, determines what is "background" vs "subject"
+  motionScript: string; // Custom JS expression for particle movement
 }
 
 export interface GeneratedImage {
