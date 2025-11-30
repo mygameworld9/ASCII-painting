@@ -17,6 +17,7 @@ export interface AsciiSettings {
   density: string; // The char set
   color: string;
   backgroundColor: string;
+  transparentBackground: boolean; // New setting
   contrast: number; // 0.5 to 2.0
   animationSpeed: number;
   animationIntensity: number; // New control for amplitude/strength

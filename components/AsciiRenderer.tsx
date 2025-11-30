@@ -43,7 +43,7 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
     };
   }, [imageSrc]);
 
-  const handleCopyText = () => {
+  const handleCopyText = async () => {
     if (!sourceImage) return;
     
     const isAscii = settings.renderMode === RenderMode.ASCII;
@@ -79,6 +79,13 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
         let r = pixels[pixelIndex];
         let g = pixels[pixelIndex + 1];
         let b = pixels[pixelIndex + 2];
+        let a = pixels[pixelIndex + 3];
+
+        // CRITICAL: Respect transparency for "No Background" copy
+        if (a < 10) {
+            resultString += " ";
+            continue;
+        }
         
         // Apply Contrast
         if (settings.contrast !== 1.0) {
@@ -93,9 +100,6 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
         b = Math.max(0, Math.min(255, b));
 
         // Apply Invert logic
-        // For ASCII, we used to calc brightness then invert brightness.
-        // For Minecraft, we must invert RGB.
-        // Doing RGB invert covers both if we use RGB for brightness calc afterwards.
         if (settings.invert) {
              r = 255 - r;
              g = 255 - g;
@@ -124,10 +128,31 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
       resultString += "\n";
     }
 
-    navigator.clipboard.writeText(resultString).then(() => {
-      setIsCopied(true);
-      setTimeout(() => setIsCopied(false), 2000);
-    });
+    try {
+        await navigator.clipboard.writeText(resultString);
+        setIsCopied(true);
+        setTimeout(() => setIsCopied(false), 2000);
+    } catch (err) {
+        // Fallback for focus issues or unsupported environments
+        const textarea = document.createElement('textarea');
+        textarea.value = resultString;
+        textarea.style.position = 'fixed'; // Prevent scrolling
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        
+        try {
+            document.execCommand('copy');
+            setIsCopied(true);
+            setTimeout(() => setIsCopied(false), 2000);
+        } catch (fallbackErr) {
+            console.error('Copy failed', fallbackErr);
+            alert('Failed to copy text to clipboard.');
+        }
+        
+        document.body.removeChild(textarea);
+    }
   };
 
   const handleDownloadImage = () => {
@@ -320,7 +345,8 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
     if (!sourceImage || !canvasRef.current || !containerRef.current) return;
 
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d', { alpha: false }); 
+    // We need alpha: true to support transparent backgrounds
+    const ctx = canvas.getContext('2d', { alpha: true }); 
     if (!ctx) return;
 
     let startTime = Date.now();
@@ -353,8 +379,12 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
       }
 
       // Fill Background
-      ctx.fillStyle = settings.backgroundColor;
-      ctx.fillRect(0, 0, targetWidth, targetHeight);
+      if (settings.transparentBackground) {
+        ctx.clearRect(0, 0, targetWidth, targetHeight);
+      } else {
+        ctx.fillStyle = settings.backgroundColor;
+        ctx.fillRect(0, 0, targetWidth, targetHeight);
+      }
 
       if (isAscii) {
           ctx.font = `bold ${settings.fontSize}px "JetBrains Mono", monospace`;
@@ -514,7 +544,6 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
     };
   }, [sourceImage, settings, motionFn]); 
 
-  // ... (rest of the file remains similar for hex conversion etc)
   const rgbToHex = (r: number, g: number, b: number) => {
     return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
   };
@@ -524,6 +553,8 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
       ref={containerRef} 
       className="w-full h-full flex items-center justify-center overflow-hidden bg-black/50 rounded-xl border border-zinc-800 shadow-2xl relative group"
     >
+      <div className="absolute inset-0 bg-[linear-gradient(45deg,#1f1f22_25%,transparent_25%,transparent_75%,#1f1f22_75%,#1f1f22),linear-gradient(45deg,#1f1f22_25%,transparent_25%,transparent_75%,#1f1f22_75%,#1f1f22)] bg-[length:20px_20px] bg-[position:0_0,10px_10px] opacity-20 pointer-events-none -z-10" />
+
       {!sourceImage && (
         <div className="text-zinc-500 animate-pulse">Processing Image...</div>
       )}
@@ -534,7 +565,7 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
       />
 
       {/* Action Buttons */}
-      <div className="absolute top-4 right-4 flex items-center gap-2 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+      <div className="absolute top-4 right-4 flex items-center gap-2 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity z-20">
          {sourceImage && (
             <button
               onClick={handleDownloadImage}

@@ -14,6 +14,7 @@ export const DEFAULT_SETTINGS = {
   density: DENSITY_SETS.COMPLEX,
   color: '#ffffff', // Default to white
   backgroundColor: '#000000',
+  transparentBackground: false,
   contrast: 1.0,
   animationSpeed: 1.0,
   animationIntensity: 1.0,

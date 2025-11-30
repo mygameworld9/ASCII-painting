@@ -1,7 +1,7 @@
 import React from 'react';
 import { AsciiSettings, AnimationMode, RenderMode } from '../types';
 import { DENSITY_SETS } from '../constants';
-import { Settings2, Monitor, Grid, Type, LayoutGrid, Tag, Box, RotateCcw, RotateCw, Sparkles, ScanFace, Wand2, User, Zap, Code, Play } from 'lucide-react';
+import { Settings2, Monitor, Grid, Type, LayoutGrid, Tag, Box, RotateCcw, RotateCw, Sparkles, ScanFace, Wand2, User, Zap, Code, Play, EyeOff } from 'lucide-react';
 import { tuneParticleSettings, generateMotionScript } from '../services/geminiService';
 
 interface ControlsProps {
@@ -463,10 +463,28 @@ export const Controls: React.FC<ControlsProps> = ({
                     onChange={(e) => handleChange('backgroundColor', e.target.value, false)}
                     onBlur={() => onCommit(settings)}
                     className="w-8 h-8 rounded cursor-pointer bg-transparent border-0"
+                    disabled={settings.transparentBackground}
                 />
-                <span className="text-xs font-mono text-zinc-500">{settings.backgroundColor}</span>
+                <span className={`text-xs font-mono transition-colors ${settings.transparentBackground ? 'text-zinc-600' : 'text-zinc-500'}`}>
+                    {settings.transparentBackground ? 'None' : settings.backgroundColor}
+                </span>
             </div>
         </div>
+      </div>
+      
+      {/* Transparent Background Toggle */}
+      <div className="flex items-center gap-3 mt-2">
+          <input 
+            type="checkbox" 
+            id="transparency"
+            checked={settings.transparentBackground}
+            onChange={(e) => handleChange('transparentBackground', e.target.checked, true)}
+            className="w-4 h-4 rounded border-zinc-600 text-indigo-600 focus:ring-indigo-500 bg-zinc-800"
+          />
+          <label htmlFor="transparency" className="text-sm text-zinc-300 cursor-pointer select-none flex items-center gap-2">
+             <EyeOff size={14} className="text-zinc-400"/>
+             Transparent Background
+          </label>
       </div>
 
       {/* Char Set - Only for ASCII */}

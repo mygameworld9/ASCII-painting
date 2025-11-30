@@ -1,12 +1,12 @@
-
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { AsciiRenderer } from './components/AsciiRenderer';
 import { Controls } from './components/Controls';
 import { Button } from './components/Button';
+import { ChromaKeyModal } from './components/ChromaKeyModal';
 import { AsciiSettings, AnimationMode } from './types';
 import { DEFAULT_SETTINGS } from './constants';
-import { generateAIImage, generateCreativePrompt } from './services/geminiService';
-import { Upload, Wand2, Image as ImageIcon, Info, X, Plus, Trash2 } from 'lucide-react';
+import { generateAIImage, generateCreativePrompt, removeBackground } from './services/geminiService';
+import { Upload, Wand2, Image as ImageIcon, Info, X, Plus, Trash2, Sparkles, Loader2, Pipette } from 'lucide-react';
 
 interface GalleryItem {
   id: string;
@@ -25,6 +25,8 @@ const App: React.FC = () => {
   const [settings, setSettings] = useState<AsciiSettings>(DEFAULT_SETTINGS);
   
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isRemovingBg, setIsRemovingBg] = useState(false);
+  const [isSuperKeyOpen, setIsSuperKeyOpen] = useState(false);
   const [isPromptLoading, setIsPromptLoading] = useState(false);
   const [promptInput, setPromptInput] = useState("");
   const [isDragging, setIsDragging] = useState(false);
@@ -110,6 +112,39 @@ const App: React.FC = () => {
       setIsGenerating(false);
     }
   }, [promptInput]);
+
+  const handleRemoveBackground = useCallback(async () => {
+    if (!activeImage) return;
+    
+    setIsRemovingBg(true);
+    try {
+      const newBase64 = await removeBackground(activeImage.url);
+      const newItem: GalleryItem = {
+        id: `rembg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        url: newBase64,
+        name: `NoBG-${activeImage.name}`
+      };
+      setGallery(prev => [...prev, newItem]);
+      setActiveId(newItem.id);
+    } catch (error) {
+      console.error("Remove BG failed", error);
+      alert("Failed to remove background. Ensure API key is valid.");
+    } finally {
+      setIsRemovingBg(false);
+    }
+  }, [activeImage]);
+
+  const handleSuperKeySave = (newBase64: string) => {
+      if (!activeImage) return;
+      const newItem: GalleryItem = {
+          id: `superkey-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+          url: newBase64,
+          name: `Keyed-${activeImage.name}`
+      };
+      setGallery(prev => [...prev, newItem]);
+      setActiveId(newItem.id);
+      setIsSuperKeyOpen(false);
+  };
 
   const handleSurpriseMe = async () => {
       setIsPromptLoading(true);
@@ -197,6 +232,13 @@ const App: React.FC = () => {
         </div>
       )}
 
+      <ChromaKeyModal 
+        isOpen={isSuperKeyOpen}
+        onClose={() => setIsSuperKeyOpen(false)}
+        imageSrc={activeImage?.url || null}
+        onSave={handleSuperKeySave}
+      />
+
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col h-full relative">
         
@@ -210,6 +252,29 @@ const App: React.FC = () => {
           </div>
           
           <div className="flex items-center gap-4">
+            {activeImage && (
+                <>
+                <button
+                    onClick={() => setIsSuperKeyOpen(true)}
+                    className="text-xs font-medium text-white bg-zinc-800 hover:bg-zinc-700 px-3 py-2 rounded-lg transition-all flex items-center gap-2 border border-zinc-700"
+                    title="Manual Background Removal (Chroma Key)"
+                >
+                    <Pipette size={14} className="text-emerald-400"/>
+                    <span className="hidden sm:inline">Super Key</span>
+                </button>
+
+                <button
+                    onClick={handleRemoveBackground}
+                    disabled={isRemovingBg}
+                    className="text-xs font-medium text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 px-3 py-2 rounded-lg transition-all flex items-center gap-2 shadow-lg shadow-indigo-500/20 disabled:opacity-50 border border-white/10"
+                    title="Use AI to remove background"
+                >
+                    {isRemovingBg ? <Loader2 size={14} className="animate-spin"/> : <Sparkles size={14} />}
+                    <span className="hidden sm:inline">Magic Remove</span>
+                </button>
+                </>
+            )}
+
             {gallery.length > 0 && (
                 <button 
                     onClick={clearGallery}
