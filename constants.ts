@@ -1,11 +1,18 @@
-
-
 import { AnimationMode, RenderMode } from "./types";
 
 export const DENSITY_SETS = {
-  STANDARD: "Ñ@#W$9876543210?!abc;:+=-,._ ",
-  SIMPLE: "@%#*+=-:. ",
-  COMPLEX: "$@B%8&WM#*oahkbdpqwmZO0QLCJUYXzcvunxrjft/\\|()1{}[]?-_+~<>i!lI;:,\"^`'. ",
+  // Strategy: Remove middle-density noise chars (-, +, =, ^, ~)
+  // Strategy: Add trailing spaces to ensure "near-white" or "near-black" maps to empty space.
+  
+  STANDARD: "Ñ@#W$9876543210?!abc;:+       ",
+  
+  SIMPLE: "@%#*+:    ",
+  
+  // Ultra-clean high detail set. 
+  // REMOVED: - _ = + < > ^ ~ " ' . ,
+  // ADDED: Extra spaces at the end to act as a noise gate.
+  COMPLEX: "$@B%8&WM#*oahkbdpqwmZO0QLCJUYXzcvunxrjft/\\|()1{}[]?I;:       ",
+  
   BLOCKS: "█▓▒░ ",
 };
 

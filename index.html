@@ -1,12 +1,11 @@
-
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ASCII Motion Art</title>
+    <title>GEN-UI // NEURAL STUDIO</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <script>
       tailwind.config = {
         theme: {
@@ -16,30 +15,113 @@
               sans: ['Inter', 'sans-serif'],
             },
             colors: {
-              cyber: '#00f3ff',
+              // Cyberpunk / FUI Palette
+              void: '#030303',
+              panel: '#0a0a0a',
+              border: '#1f1f1f',
+              primary: '#3b82f6', 
+              cyan: '#00f3ff',
+              magenta: '#bc13fe',
+              success: '#00ff9d',
+              warning: '#ffb800',
+              danger: '#ff3333',
+            },
+            backgroundImage: {
+              'tech-grid': "linear-gradient(to right, #1a1a1a 1px, transparent 1px), linear-gradient(to bottom, #1a1a1a 1px, transparent 1px)",
             }
           },
         },
       }
     </script>
     <style>
-      body {
-        background-color: #09090b;
-        color: #e4e4e7;
+      :root {
+        --color-cyan: #00f3ff;
+        --color-void: #030303;
+        --color-panel: #0a0a0a;
+        --color-border: #222222;
       }
-      /* Custom scrollbar */
+      
+      body {
+        background-color: var(--color-void);
+        color: #e4e4e7;
+        overflow: hidden;
+      }
+      
+      /* Tech Grid Background - Sharp, No Blur */
+      .bg-grid-pattern {
+        background-size: 40px 40px;
+        background-image: 
+          linear-gradient(to right, rgba(255,255,255,0.03) 1px, transparent 1px),
+          linear-gradient(to bottom, rgba(255,255,255,0.03) 1px, transparent 1px);
+        mask-image: linear-gradient(to bottom, black 40%, transparent 100%);
+      }
+
+      /* Custom Range Slider - FUI Style */
+      input[type=range] {
+        -webkit-appearance: none;
+        background: transparent;
+        height: 20px;
+        margin: 0;
+      }
+      input[type=range]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        height: 14px;
+        width: 6px;
+        background: var(--color-cyan);
+        cursor: pointer;
+        margin-top: -6px;
+        border: 1px solid #000;
+        box-shadow: 0 0 5px var(--color-cyan);
+      }
+      input[type=range]::-webkit-slider-runnable-track {
+        width: 100%;
+        height: 2px;
+        background: #333;
+      }
+      input[type=range]:focus::-webkit-slider-runnable-track {
+        background: #444;
+      }
+      
+      /* Ultra-thin Scrollbar */
       ::-webkit-scrollbar {
-        width: 8px;
+        width: 4px;
+        height: 4px;
       }
       ::-webkit-scrollbar-track {
-        background: #18181b;
+        background: var(--color-void);
       }
       ::-webkit-scrollbar-thumb {
-        background: #3f3f46;
-        border-radius: 4px;
+        background: #333;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: #52525b;
+        background: var(--color-cyan);
+      }
+
+      /* Selection */
+      ::selection {
+        background: rgba(0, 243, 255, 0.2);
+        color: var(--color-cyan);
+      }
+
+      /* FUI Utility: Angled Corners */
+      .clip-corner {
+        clip-path: polygon(
+          0 0, 
+          100% 0, 
+          100% calc(100% - 8px), 
+          calc(100% - 8px) 100%, 
+          0 100%
+        );
+      }
+      
+      .clip-corner-top {
+        clip-path: polygon(
+           8px 0,
+           100% 0,
+           100% 100%,
+           0 100%,
+           0 8px
+        );
       }
     </style>
   <script type="importmap">

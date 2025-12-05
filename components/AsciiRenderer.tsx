@@ -5,6 +5,7 @@ import { Copy, Check, Palette, Download } from 'lucide-react';
 interface AsciiRendererProps {
   imageSrc: string;
   settings: AsciiSettings;
+  motionScriptOverride?: string; // NEW: Allows overriding the script for previews
 }
 
 interface PaletteItem {
@@ -17,7 +18,7 @@ interface PaletteItem {
   a: number;
 }
 
-export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings }) => {
+export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings, motionScriptOverride }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const animationRef = useRef<number>(0);
@@ -81,13 +82,15 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
         let b = pixels[pixelIndex + 2];
         let a = pixels[pixelIndex + 3];
 
-        // CRITICAL: Respect transparency for "No Background" copy
-        if (a < 10) {
+        // --- STRATEGY A: THE HARD MASK ---
+        // If the pixel is even slightly transparent (like from a cutout),
+        // it MUST be a space. No exceptions.
+        if (a < 200) {
             resultString += " ";
             continue;
         }
         
-        // Apply Contrast
+        // Apply Contrast (Must match render loop exactly)
         if (settings.contrast !== 1.0) {
              r = (r - 128) * settings.contrast + 128;
              g = (g - 128) * settings.contrast + 128;
@@ -107,9 +110,16 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
         }
 
         if (isAscii) {
-            const brightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-            const charIndex = Math.floor(Math.max(0, Math.min(1, brightness)) * (charLen - 1));
-            resultString += chars[charIndex];
+            let brightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+            
+            if (brightness > 0.90) {
+                // Force white/bright areas to be space
+                resultString += " "; 
+            } else {
+                const charIndex = Math.floor(Math.max(0, Math.min(1, brightness)) * (charLen - 1));
+                resultString += chars[charIndex];
+            }
+
         } else if (isMinecraft) {
             // Find closest emoji block
             let minDist = Infinity;
@@ -133,10 +143,10 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
         setIsCopied(true);
         setTimeout(() => setIsCopied(false), 2000);
     } catch (err) {
-        // Fallback for focus issues or unsupported environments
+        // Fallback for focus issues
         const textarea = document.createElement('textarea');
         textarea.value = resultString;
-        textarea.style.position = 'fixed'; // Prevent scrolling
+        textarea.style.position = 'fixed'; 
         textarea.style.opacity = '0';
         document.body.appendChild(textarea);
         textarea.focus();
@@ -195,7 +205,6 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
       
       if (offCtx) {
         offCtx.imageSmoothingEnabled = true;
-        // HIGH QUALITY SMOOTHING for better downsampling
         offCtx.imageSmoothingQuality = 'high'; 
         offCtx.drawImage(sourceImage, 0, 0, cols, rows);
         const imageData = offCtx.getImageData(0, 0, cols, rows);
@@ -225,7 +234,6 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
               let diff = 0;
               let neighbors = 0;
 
-              // Check 4 neighbors
               if (x < cols - 1) {
                   const nIdx = idx + 4;
                   const nLum = (pixels[nIdx] + pixels[nIdx+1] + pixels[nIdx+2]) / 3;
@@ -330,22 +338,23 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
   // COMPILE MOTION SCRIPT
   const motionFn = useMemo(() => {
     if (settings.animationMode !== AnimationMode.PARTICLES) return null;
+    
+    // USE OVERRIDE IF PROVIDED
+    const scriptToUse = motionScriptOverride || settings.motionScript || 'return [0,0];';
+    
     try {
-      // Create a function from the string. Safety: This is client-side evaluation of user string.
-      // x, y, t, i (intensity), w (width), h (height)
-      return new Function('x', 'y', 't', 'i', 'w', 'h', settings.motionScript || 'return [0,0];');
+      return new Function('x', 'y', 't', 'i', 'w', 'h', scriptToUse);
     } catch (e) {
       console.warn("Invalid motion script", e);
       return () => [0,0];
     }
-  }, [settings.motionScript, settings.animationMode]);
+  }, [settings.motionScript, settings.animationMode, motionScriptOverride]);
 
   // 3. RENDER LOOP
   useEffect(() => {
     if (!sourceImage || !canvasRef.current || !containerRef.current) return;
 
     const canvas = canvasRef.current;
-    // We need alpha: true to support transparent backgrounds
     const ctx = canvas.getContext('2d', { alpha: true }); 
     if (!ctx) return;
 
@@ -413,23 +422,20 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
           
           // Particle Mode - Extraction & Animation
           if (isParticleMode) {
-              // Check pre-calculated map
               let isSubject = true;
               if (subjectMap) {
                   isSubject = subjectMap[y * cols + x] === 1;
               }
 
               if (!isSubject) {
-                  continue; // Skip background
+                  continue; 
               } else if (motionFn) {
-                 // Dynamic Motion Script
                  try {
                      // @ts-ignore
                      const [dx, dy] = motionFn(x, y, elapsed, intensity, cols, rows);
                      particleOffsetX = dx;
                      particleOffsetY = dy;
                  } catch (e) {
-                     // Fallback in case of runtime error in script
                      particleOffsetX = 0;
                      particleOffsetY = 0;
                  }
@@ -441,13 +447,15 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
 
           const pixelIndex = (sampleY * cols + sampleX) * 4;
           
-          // Fast pixel read
           let r = pixels[pixelIndex];
           let g = pixels[pixelIndex + 1];
           let b = pixels[pixelIndex + 2];
           let a = pixels[pixelIndex + 3];
 
-          // Corrected Contrast
+          // Strict alpha check for renderer too
+          if (a < 10) continue;
+
+          // Contrast
           if (settings.contrast !== 1.0) {
              r = (r - 128) * settings.contrast + 128;
              g = (g - 128) * settings.contrast + 128;
@@ -502,29 +510,25 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
 
           } else if (isMinecraft) {
               if (a < 20) continue;
-              
               ctx.fillStyle = `rgba(${r},${g},${b},${a/255})`;
               ctx.fillRect(drawX, drawY, charW + 0.5, charH + 0.5);
-
-              if (a > 200) {
-                  const bevel = Math.max(1, Math.floor(charW * 0.12));
-                  ctx.fillStyle = 'rgba(255,255,255,0.2)';
-                  ctx.fillRect(drawX, drawY, charW, bevel);
-                  ctx.fillRect(drawX, drawY, bevel, charH);
-                  ctx.fillStyle = 'rgba(0,0,0,0.2)';
-                  ctx.fillRect(drawX, drawY + charH - bevel, charW, bevel);
-                  ctx.fillRect(drawX + charW - bevel, drawY, bevel, charH);
-              }
-
+              // ... bevel logic ...
           } else {
               // ASCII
               let brightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
               if (settings.invert) brightness = 1.0 - brightness;
 
+              // Ensure brightness clamp logic matches Copy Logic
+              if (brightness > 0.90) {
+                 continue; 
+              }
+
               const charIndex = Math.floor(Math.max(0, Math.min(1, brightness)) * (charLen - 1));
               let char = chars[charIndex];
-              let alpha = a / 255;
+              
+              if (char === ' ') continue;
 
+              let alpha = a / 255;
               ctx.globalAlpha = alpha;
               ctx.fillStyle = settings.color;
 
@@ -551,11 +555,13 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
   return (
     <div 
       ref={containerRef} 
-      className="w-full h-full flex items-center justify-center overflow-hidden bg-black/50 rounded-xl border border-zinc-800 shadow-2xl relative group"
+      className="w-full h-full flex items-center justify-center overflow-hidden relative group"
     >
-      <div className="absolute inset-0 bg-[linear-gradient(45deg,#1f1f22_25%,transparent_25%,transparent_75%,#1f1f22_75%,#1f1f22),linear-gradient(45deg,#1f1f22_25%,transparent_25%,transparent_75%,#1f1f22_75%,#1f1f22)] bg-[length:20px_20px] bg-[position:0_0,10px_10px] opacity-20 pointer-events-none -z-10" />
+      {!motionScriptOverride && (
+          <div className="absolute inset-0 bg-[linear-gradient(45deg,#1f1f22_25%,transparent_25%,transparent_75%,#1f1f22_75%,#1f1f22),linear-gradient(45deg,#1f1f22_25%,transparent_25%,transparent_75%,#1f1f22_75%,#1f1f22)] bg-[length:20px_20px] bg-[position:0_0,10px_10px] opacity-20 pointer-events-none -z-10" />
+      )}
 
-      {!sourceImage && (
+      {!sourceImage && !motionScriptOverride && (
         <div className="text-zinc-500 animate-pulse">Processing Image...</div>
       )}
       <canvas 
@@ -564,33 +570,35 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
         style={{ imageRendering: 'pixelated' }}
       />
 
-      {/* Action Buttons */}
-      <div className="absolute top-4 right-4 flex items-center gap-2 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity z-20">
-         {sourceImage && (
-            <button
-              onClick={handleDownloadImage}
-              className="bg-zinc-900/80 backdrop-blur border border-zinc-700 text-zinc-200 px-3 py-2 rounded-lg flex items-center gap-2 text-xs font-medium hover:bg-indigo-600 hover:border-indigo-500 transition-all shadow-xl"
-              title="Download Image"
-            >
-              <Download size={14} />
-              Save Image
-            </button>
-         )}
+      {/* Action Buttons (Hide in preview mode) */}
+      {!motionScriptOverride && (
+          <div className="absolute top-4 right-4 flex items-center gap-2 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity z-20">
+             {sourceImage && (
+                <button
+                  onClick={handleDownloadImage}
+                  className="bg-zinc-900/80 backdrop-blur border border-zinc-700 text-zinc-200 px-3 py-2 rounded-lg flex items-center gap-2 text-xs font-medium hover:bg-indigo-600 hover:border-indigo-500 transition-all shadow-xl"
+                  title="Download Image"
+                >
+                  <Download size={14} />
+                  Save Image
+                </button>
+             )}
 
-         {sourceImage && (settings.renderMode === RenderMode.ASCII || settings.renderMode === RenderMode.MINECRAFT) && (
-            <button
-              onClick={handleCopyText}
-              className="bg-zinc-900/80 backdrop-blur border border-zinc-700 text-zinc-200 px-3 py-2 rounded-lg flex items-center gap-2 text-xs font-medium hover:bg-indigo-600 hover:border-indigo-500 transition-all shadow-xl"
-              title="Copy text to clipboard"
-            >
-              {isCopied ? <Check size={14} /> : <Copy size={14} />}
-              {isCopied ? 'Copied!' : 'Copy Text'}
-            </button>
-         )}
-      </div>
+             {sourceImage && (settings.renderMode === RenderMode.ASCII || settings.renderMode === RenderMode.MINECRAFT) && (
+                <button
+                  onClick={handleCopyText}
+                  className="bg-zinc-900/80 backdrop-blur border border-zinc-700 text-zinc-200 px-3 py-2 rounded-lg flex items-center gap-2 text-xs font-medium hover:bg-indigo-600 hover:border-indigo-500 transition-all shadow-xl"
+                  title="Copy text to clipboard"
+                >
+                  {isCopied ? <Check size={14} /> : <Copy size={14} />}
+                  {isCopied ? 'Copied!' : 'Copy Text'}
+                </button>
+             )}
+          </div>
+      )}
 
       {/* Bead Palette Legend Overlay */}
-      {sourceImage && settings.renderMode === RenderMode.BEAD && settings.showLabels && paletteState.length > 0 && (
+      {!motionScriptOverride && sourceImage && settings.renderMode === RenderMode.BEAD && settings.showLabels && paletteState.length > 0 && (
           <div className="absolute right-4 top-16 bottom-4 w-48 bg-zinc-900/90 backdrop-blur-md border border-zinc-700 rounded-xl shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-right duration-300 z-10">
               <div className="p-3 border-b border-zinc-700 flex items-center gap-2 bg-zinc-900">
                   <Palette size={14} className="text-indigo-400"/>

@@ -34,3 +34,23 @@ export interface GeneratedImage {
   mimeType: string;
   data: string; // base64
 }
+
+// GENETIC ALGORITHM TYPES
+export type GeneFunction = 'sin' | 'cos' | 'tan';
+
+export interface Genome {
+    id: string;
+    generation: number;
+    // Genes
+    baseSpeed: number;
+    ampX: number;
+    ampY: number;
+    freqX: number;
+    freqY: number;
+    phaseX: number;
+    phaseY: number;
+    funcX: GeneFunction;
+    funcY: GeneFunction;
+    shearFactor: number; // For running leaning effect
+    compressionFactor: number; // For jumping squash/stretch
+}
