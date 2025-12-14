@@ -1,11 +1,13 @@
 import React, { useRef, useEffect, useState, useMemo } from 'react';
-import { AsciiSettings, AnimationMode, RenderMode } from '../types';
-import { Copy, Check, Palette, Download } from 'lucide-react';
+import { AsciiSettings, AnimationMode, RenderMode, Language } from '../types';
+import { TRANSLATIONS } from '../constants';
+import { Copy, Check, Palette, Download, Search } from 'lucide-react';
 
 interface AsciiRendererProps {
   imageSrc: string;
   settings: AsciiSettings;
   motionScriptOverride?: string; // NEW: Allows overriding the script for previews
+  language?: Language;
 }
 
 interface PaletteItem {
@@ -18,7 +20,7 @@ interface PaletteItem {
   a: number;
 }
 
-export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings, motionScriptOverride }) => {
+export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings, motionScriptOverride, language = 'zh' }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const animationRef = useRef<number>(0);
@@ -33,6 +35,9 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
   const [sourceImage, setSourceImage] = useState<HTMLImageElement | null>(null);
   const [isCopied, setIsCopied] = useState(false);
   const [paletteState, setPaletteState] = useState<PaletteItem[]>([]);
+  const [selectedColorId, setSelectedColorId] = useState<number | null>(null);
+  
+  const t = TRANSLATIONS[language];
 
   // Load image
   useEffect(() => {
@@ -43,6 +48,11 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
       setSourceImage(img);
     };
   }, [imageSrc]);
+
+  // Reset selection when image or mode changes
+  useEffect(() => {
+    setSelectedColorId(null);
+  }, [imageSrc, settings.renderMode, settings.resolution]);
 
   const handleCopyText = async () => {
     if (!sourceImage) return;
@@ -400,7 +410,7 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
           ctx.textBaseline = 'top';
       }
 
-      if (isBead && settings.showLabels) {
+      if (isBead && (settings.showLabels || selectedColorId !== null)) {
           const labelSize = Math.max(8, settings.fontSize * 0.5);
           ctx.font = `${labelSize}px "Inter", sans-serif`;
           ctx.textAlign = 'center';
@@ -487,21 +497,40 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
               const cx = drawX + charW / 2;
               const cy = drawY + charH / 2;
               const radius = (charW / 2) * 0.85; 
+
+              const key = `${qr},${qg},${qb},${qa}`;
+              const id = colorMap.get(key);
+              
+              // HIGHLIGHT LOGIC
+              const isSelected = selectedColorId === id;
+              const isAnySelected = selectedColorId !== null;
+              
+              if (isAnySelected && !isSelected) {
+                  ctx.globalAlpha = 0.1;
+              } else {
+                  ctx.globalAlpha = 1.0;
+              }
               
               ctx.fillStyle = `rgba(${qr},${qg},${qb},${qa/255})`;
               ctx.beginPath();
               ctx.arc(cx, cy, radius, 0, Math.PI * 2);
               ctx.fill();
 
-              if (settings.showLabels) {
-                  const key = `${qr},${qg},${qb},${qa}`;
-                  const id = colorMap.get(key);
-                  if (id !== undefined) {
-                      const brightness = (qr * 299 + qg * 587 + qb * 114) / 1000;
-                      ctx.fillStyle = brightness > 128 ? '#000000' : '#ffffff';
-                      ctx.fillText(id.toString(), cx, cy);
-                  }
+              // Selection ring
+              if (isSelected) {
+                  ctx.lineWidth = 1.5;
+                  ctx.strokeStyle = '#00f3ff';
+                  ctx.stroke();
               }
+
+              // Labels: Show if global setting is true OR if this specific color is selected
+              if ((settings.showLabels || isSelected) && id !== undefined) {
+                  const brightness = (qr * 299 + qg * 587 + qb * 114) / 1000;
+                  ctx.fillStyle = brightness > 128 ? '#000000' : '#ffffff';
+                  ctx.fillText(id.toString(), cx, cy);
+              }
+              
+              ctx.globalAlpha = 1.0; // Reset
 
           } else if (isPixel) {
               if (a < 5) continue;
@@ -546,7 +575,7 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
     return () => {
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
     };
-  }, [sourceImage, settings, motionFn]); 
+  }, [sourceImage, settings, motionFn, selectedColorId]); 
 
   const rgbToHex = (r: number, g: number, b: number) => {
     return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
@@ -562,7 +591,7 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
       )}
 
       {!sourceImage && !motionScriptOverride && (
-        <div className="text-zinc-500 animate-pulse">Processing Image...</div>
+        <div className="text-zinc-500 animate-pulse">{t.processing}</div>
       )}
       <canvas 
         ref={canvasRef} 
@@ -577,10 +606,10 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
                 <button
                   onClick={handleDownloadImage}
                   className="bg-zinc-900/80 backdrop-blur border border-zinc-700 text-zinc-200 px-3 py-2 rounded-lg flex items-center gap-2 text-xs font-medium hover:bg-indigo-600 hover:border-indigo-500 transition-all shadow-xl"
-                  title="Download Image"
+                  title={t.saveImage}
                 >
                   <Download size={14} />
-                  Save Image
+                  {t.saveImage}
                 </button>
              )}
 
@@ -588,37 +617,57 @@ export const AsciiRenderer: React.FC<AsciiRendererProps> = ({ imageSrc, settings
                 <button
                   onClick={handleCopyText}
                   className="bg-zinc-900/80 backdrop-blur border border-zinc-700 text-zinc-200 px-3 py-2 rounded-lg flex items-center gap-2 text-xs font-medium hover:bg-indigo-600 hover:border-indigo-500 transition-all shadow-xl"
-                  title="Copy text to clipboard"
+                  title={t.copyText}
                 >
                   {isCopied ? <Check size={14} /> : <Copy size={14} />}
-                  {isCopied ? 'Copied!' : 'Copy Text'}
+                  {isCopied ? t.copied : t.copyText}
                 </button>
              )}
           </div>
       )}
 
       {/* Bead Palette Legend Overlay */}
-      {!motionScriptOverride && sourceImage && settings.renderMode === RenderMode.BEAD && settings.showLabels && paletteState.length > 0 && (
+      {!motionScriptOverride && sourceImage && settings.renderMode === RenderMode.BEAD && paletteState.length > 0 && (
           <div className="absolute right-4 top-16 bottom-4 w-48 bg-zinc-900/90 backdrop-blur-md border border-zinc-700 rounded-xl shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-right duration-300 z-10">
               <div className="p-3 border-b border-zinc-700 flex items-center gap-2 bg-zinc-900">
                   <Palette size={14} className="text-indigo-400"/>
-                  <h3 className="text-xs font-bold text-zinc-200">Color Palette</h3>
-                  <span className="text-[10px] ml-auto text-zinc-500">{paletteState.length} colors</span>
+                  <h3 className="text-xs font-bold text-zinc-200">{t.colorPalette}</h3>
+                  <span className="text-[10px] ml-auto text-zinc-500">{paletteState.length} {t.colors}</span>
               </div>
+              
+              {/* Highlight Instruction */}
+              <div className="px-3 py-1 bg-zinc-900/50 text-[9px] text-zinc-500 border-b border-zinc-800 italic text-center">
+                   {t.clickToHighlight}
+              </div>
+
               <div className="overflow-y-auto flex-1 p-2 space-y-1 custom-scrollbar">
                   {paletteState.map((p) => (
-                      <div key={p.id} className="flex items-center gap-2 p-1.5 rounded hover:bg-zinc-800/50 transition-colors">
-                          <span className="text-[10px] font-mono font-bold w-4 text-zinc-400 text-right">{p.id}.</span>
+                      <button 
+                        key={p.id} 
+                        onClick={() => setSelectedColorId(selectedColorId === p.id ? null : p.id)}
+                        className={`w-full text-left flex items-center gap-2 p-1.5 rounded transition-all border ${
+                            selectedColorId === p.id 
+                            ? 'bg-cyan-950/30 border-cyan-500/50 hover:bg-cyan-900/40' 
+                            : 'border-transparent hover:bg-zinc-800/50'
+                        }`}
+                      >
+                          <span className={`text-[10px] font-mono font-bold w-4 text-right ${selectedColorId === p.id ? 'text-cyan-400' : 'text-zinc-400'}`}>{p.id}.</span>
                           <div 
-                            className="w-6 h-6 rounded-full border border-zinc-600 shadow-sm flex items-center justify-center" 
+                            className="w-6 h-6 rounded-full border border-zinc-600 shadow-sm flex items-center justify-center relative overflow-hidden" 
                             style={{backgroundColor: p.color}}
                           >
+                             {selectedColorId === p.id && (
+                                 <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                                     <div className="w-1.5 h-1.5 bg-white rounded-full shadow-sm" />
+                                 </div>
+                             )}
                           </div>
                           <div className="flex flex-col">
-                              <span className="text-[10px] font-mono text-zinc-300">{rgbToHex(p.r, p.g, p.b)}</span>
-                              <span className="text-[9px] text-zinc-600">{p.count} beads</span>
+                              <span className={`text-[10px] font-mono ${selectedColorId === p.id ? 'text-cyan-100' : 'text-zinc-300'}`}>{rgbToHex(p.r, p.g, p.b)}</span>
+                              <span className="text-[9px] text-zinc-600">{p.count} {t.beadsCount}</span>
                           </div>
-                      </div>
+                          {selectedColorId === p.id && <Search size={12} className="ml-auto text-cyan-500 animate-pulse" />}
+                      </button>
                   ))}
               </div>
           </div>

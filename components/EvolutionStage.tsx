@@ -1,19 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { AsciiRenderer } from './AsciiRenderer';
-import { AsciiSettings, Genome } from '../types';
+import { AsciiSettings, Genome, Language } from '../types';
 import { createRandomGenome, mutateGenome, genomeToScript, getSeedGenome } from '../services/geneticService';
 import { Dna, Check, RefreshCw, X } from 'lucide-react';
+import { TRANSLATIONS } from '../constants';
 
 interface EvolutionStageProps {
   imageSrc: string;
   baseSettings: AsciiSettings;
   onSave: (script: string) => void;
   onCancel: () => void;
+  language?: Language;
 }
 
-export const EvolutionStage: React.FC<EvolutionStageProps> = ({ imageSrc, baseSettings, onSave, onCancel }) => {
+export const EvolutionStage: React.FC<EvolutionStageProps> = ({ imageSrc, baseSettings, onSave, onCancel, language = 'zh' }) => {
   const [generation, setGeneration] = useState(0);
   const [population, setPopulation] = useState<Genome[]>([]);
+  const t = TRANSLATIONS[language];
   
   // Initialize with seeds
   useEffect(() => {
@@ -66,13 +69,13 @@ export const EvolutionStage: React.FC<EvolutionStageProps> = ({ imageSrc, baseSe
                  <Dna size={18} className="text-white"/>
              </div>
              <div>
-                 <h2 className="text-lg font-bold text-white">Evolution Lab</h2>
-                 <p className="text-xs text-zinc-400">Gen {generation} • Select the best mutation</p>
+                 <h2 className="text-lg font-bold text-white">{t.evolutionLab}</h2>
+                 <p className="text-xs text-zinc-400">{t.gen} {generation} • {t.selectMutation}</p>
              </div>
          </div>
          <div className="flex items-center gap-3">
              <button onClick={onCancel} className="px-4 py-2 text-sm text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors">
-                 Exit
+                 {t.exit}
              </button>
          </div>
       </div>
@@ -96,11 +99,12 @@ export const EvolutionStage: React.FC<EvolutionStageProps> = ({ imageSrc, baseSe
                         imageSrc={imageSrc} 
                         settings={previewSettings} 
                         motionScriptOverride={script}
+                        language={language}
                       />
                       
                       <div className="absolute inset-0 bg-emerald-500/0 group-hover:bg-emerald-500/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
                           <span className="bg-emerald-600 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg transform scale-90 group-hover:scale-100 transition-transform">
-                              Select & Breed
+                              {t.selectBreed}
                           </span>
                       </div>
                       
@@ -111,7 +115,7 @@ export const EvolutionStage: React.FC<EvolutionStageProps> = ({ imageSrc, baseSe
                             onSave(script);
                         }}
                         className="absolute bottom-2 right-2 z-20 bg-zinc-800 hover:bg-emerald-600 text-white p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all scale-90 hover:scale-100 shadow-xl border border-white/10"
-                        title="Save this one"
+                        title={t.saveOne}
                       >
                           <Check size={16} />
                       </button>
@@ -122,19 +126,19 @@ export const EvolutionStage: React.FC<EvolutionStageProps> = ({ imageSrc, baseSe
 
       {/* Footer Controls */}
       <div className="h-16 border-t border-zinc-800 bg-zinc-900 px-6 flex items-center justify-center gap-4">
-          <span className="text-xs text-zinc-500 uppercase font-bold tracking-wider mr-2">Reseed Population:</span>
+          <span className="text-xs text-zinc-500 uppercase font-bold tracking-wider mr-2">{t.reseedPopulation}</span>
           
           <button onClick={() => handleReset('runner')} className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs rounded-lg border border-zinc-700 transition-colors">
              <RefreshCw size={12} />
-             Runner
+             {t.runner}
           </button>
           <button onClick={() => handleReset('jumper')} className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs rounded-lg border border-zinc-700 transition-colors">
              <RefreshCw size={12} />
-             Jumper
+             {t.jumper}
           </button>
           <button onClick={() => handleReset('shaker')} className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs rounded-lg border border-zinc-700 transition-colors">
              <RefreshCw size={12} />
-             Chaos
+             {t.chaos}
           </button>
       </div>
 

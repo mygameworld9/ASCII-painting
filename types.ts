@@ -1,5 +1,4 @@
 
-
 export enum AnimationMode {
   STATIC = 'STATIC',
   PARTICLES = 'PARTICLES'
@@ -10,6 +9,14 @@ export enum RenderMode {
   BEAD = 'BEAD',
   PIXEL = 'PIXEL',
   MINECRAFT = 'MINECRAFT'
+}
+
+export type Language = 'en' | 'zh';
+
+export interface GalleryItem {
+  id: string;
+  url: string;
+  name: string;
 }
 
 export interface AsciiSettings {

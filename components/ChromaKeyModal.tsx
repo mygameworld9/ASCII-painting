@@ -1,17 +1,20 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { X, Check, Pipette, Sliders, Undo2, Loader2, MousePointer2, Crop, Trash2 } from 'lucide-react';
 import { Button } from './Button';
+import { Language } from '../types';
+import { TRANSLATIONS } from '../constants';
 
 interface ChromaKeyModalProps {
   isOpen: boolean;
   onClose: () => void;
   imageSrc: string | null;
   onSave: (result: string) => void;
+  language?: Language;
 }
 
 type ToolMode = 'none' | 'picker' | 'crop';
 
-export const ChromaKeyModal: React.FC<ChromaKeyModalProps> = ({ isOpen, onClose, imageSrc, onSave }) => {
+export const ChromaKeyModal: React.FC<ChromaKeyModalProps> = ({ isOpen, onClose, imageSrc, onSave, language = 'zh' }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [sourceImage, setSourceImage] = useState<HTMLImageElement | null>(null);
   
@@ -26,6 +29,8 @@ export const ChromaKeyModal: React.FC<ChromaKeyModalProps> = ({ isOpen, onClose,
   const [cropRect, setCropRect] = useState<{x: number, y: number, w: number, h: number} | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState<{x: number, y: number} | null>(null);
+  
+  const t = TRANSLATIONS[language];
 
   // Load Image
   useEffect(() => {
@@ -220,8 +225,8 @@ export const ChromaKeyModal: React.FC<ChromaKeyModalProps> = ({ isOpen, onClose,
                     <Pipette size={18} />
                 </div>
                 <div>
-                    <h2 className="text-lg font-bold text-white">Super Key Editor</h2>
-                    <p className="text-xs text-zinc-400">Remove background & Crop</p>
+                    <h2 className="text-lg font-bold text-white">{t.superKeyEditor}</h2>
+                    <p className="text-xs text-zinc-400">{t.removeBgCrop}</p>
                 </div>
             </div>
             <button onClick={onClose} className="p-2 hover:bg-zinc-800 rounded-full text-zinc-400 hover:text-white transition-colors">
@@ -263,7 +268,7 @@ export const ChromaKeyModal: React.FC<ChromaKeyModalProps> = ({ isOpen, onClose,
                             tool === 'picker' ? 'bg-indigo-600 text-white shadow-md' : 'text-zinc-400 hover:text-white'
                         }`}
                     >
-                        <Pipette size={14} /> Color Picker
+                        <Pipette size={14} /> {t.colorPicker}
                     </button>
                     <button
                         onClick={() => setTool('crop')}
@@ -271,13 +276,13 @@ export const ChromaKeyModal: React.FC<ChromaKeyModalProps> = ({ isOpen, onClose,
                             tool === 'crop' ? 'bg-indigo-600 text-white shadow-md' : 'text-zinc-400 hover:text-white'
                         }`}
                     >
-                        <Crop size={14} /> Crop / Cut
+                        <Crop size={14} /> {t.cropCut}
                     </button>
                 </div>
 
                 {/* 1. Key Color Controls */}
                 <div className={`space-y-4 transition-opacity ${tool !== 'picker' ? 'opacity-50 pointer-events-none' : ''}`}>
-                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Chroma Key</label>
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">{t.selectedColor}</label>
                     
                     <div className="flex items-center gap-3">
                         <div 
@@ -285,14 +290,14 @@ export const ChromaKeyModal: React.FC<ChromaKeyModalProps> = ({ isOpen, onClose,
                             style={{ backgroundColor: `rgb(${keyColor[0]}, ${keyColor[1]}, ${keyColor[2]})` }}
                         />
                         <div className="flex-1">
-                            <div className="text-xs text-zinc-300">Selected Color</div>
+                            <div className="text-xs text-zinc-300">{t.selectedColor}</div>
                             <div className="text-[10px] text-zinc-500 font-mono">RGB: {keyColor.join(', ')}</div>
                         </div>
                     </div>
 
                     <div className="space-y-3">
                         <div className="flex justify-between items-center">
-                            <label className="text-sm font-medium text-zinc-300">Tolerance</label>
+                            <label className="text-sm font-medium text-zinc-300">{t.tolerance}</label>
                             <span className="text-xs font-mono text-indigo-400 bg-indigo-500/10 px-2 py-1 rounded">{tolerance}%</span>
                         </div>
                         <input
@@ -307,7 +312,7 @@ export const ChromaKeyModal: React.FC<ChromaKeyModalProps> = ({ isOpen, onClose,
 
                     <div className="space-y-3">
                         <div className="flex justify-between items-center">
-                            <label className="text-sm font-medium text-zinc-300">Softness</label>
+                            <label className="text-sm font-medium text-zinc-300">{t.softness}</label>
                             <span className="text-xs font-mono text-indigo-400 bg-indigo-500/10 px-2 py-1 rounded">{softness}%</span>
                         </div>
                         <input
@@ -326,18 +331,18 @@ export const ChromaKeyModal: React.FC<ChromaKeyModalProps> = ({ isOpen, onClose,
                 {/* 2. Crop Controls */}
                 <div className={`space-y-3 transition-opacity ${tool !== 'crop' ? 'opacity-50 pointer-events-none' : ''}`}>
                      <div className="flex justify-between items-center">
-                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Crop Area</label>
+                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">{t.cropArea}</label>
                         {cropRect && (
                             <button 
                                 onClick={() => setCropRect(null)}
                                 className="text-[10px] text-red-400 hover:text-red-300 flex items-center gap-1"
                             >
-                                <Trash2 size={10} /> Clear Crop
+                                <Trash2 size={10} /> {t.clearCrop}
                             </button>
                         )}
                      </div>
                      <p className="text-xs text-zinc-400 leading-relaxed">
-                        Drag on the image to select the area you want to keep. Everything outside the box will be removed.
+                        {t.cropInstruction}
                      </p>
                 </div>
 
@@ -347,7 +352,7 @@ export const ChromaKeyModal: React.FC<ChromaKeyModalProps> = ({ isOpen, onClose,
                         className="w-full h-12 text-base shadow-xl shadow-indigo-500/20"
                         icon={<Check size={18} />}
                     >
-                        {cropRect ? 'Save Cropped Selection' : 'Save Image'}
+                        {cropRect ? t.saveCropped : t.saveImageSimple}
                     </Button>
                     <Button 
                         variant="secondary"
@@ -361,7 +366,7 @@ export const ChromaKeyModal: React.FC<ChromaKeyModalProps> = ({ isOpen, onClose,
                         className="w-full"
                         icon={<Undo2 size={16} />}
                     >
-                        Reset All
+                        {t.resetAll}
                     </Button>
                 </div>
 
