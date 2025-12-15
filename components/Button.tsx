@@ -21,6 +21,7 @@ export const Button: React.FC<ButtonProps> = ({
   ...props 
 }) => {
   // Pro Tool Aesthetic: Sharp, minimal, high-contrast, no bloat.
+  // Performance: CSS transitions only, no complex DOM.
   const baseStyles = "relative inline-flex items-center justify-center font-sans font-medium transition-colors duration-100 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none select-none rounded-[2px]";
   
   const variants = {

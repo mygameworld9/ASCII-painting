@@ -1,7 +1,8 @@
+
 import React, { useState, useRef } from 'react';
 import { AsciiSettings, AnimationMode, RenderMode, Language, GalleryItem } from '../types';
 import { DENSITY_SETS, TRANSLATIONS } from '../constants';
-import { Monitor, Grid, Dna, RotateCcw, RotateCw, Type, Box, Layout, Play, Code, Eye, EyeOff, Zap, Plus, Trash2, Eraser, Pipette, Loader2, Image as ImageIcon, Layers, FileImage, Sparkles } from 'lucide-react';
+import { Monitor, Grid, Dna, RotateCcw, RotateCw, Type, Box, Layout, Play, Code, Eye, EyeOff, Zap, Plus, Trash2, Eraser, Pipette, Loader2, Image as ImageIcon, Layers, FileImage, Sparkles, SlidersHorizontal } from 'lucide-react';
 import { generateMotionScript } from '../services/geminiService';
 import { Button } from './Button';
 
@@ -460,17 +461,3 @@ export const Controls: React.FC<ControlsProps> = ({
     </div>
   );
 };
-
-// Helper for icon
-function SlidersHorizontal({ size, className }: { size: number, className?: string }) {
-    return (
-        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-            <line x1="4" x2="20" y1="21" y2="21" />
-            <line x1="20" x2="4" y1="3" y2="3" />
-            <line x1="4" x2="20" y1="12" y2="12" />
-            <circle cx="8" cy="12" r="2" />
-            <circle cx="16" cy="3" r="2" />
-            <circle cx="12" cy="21" r="2" />
-        </svg>
-    )
-}
